@@ -1062,21 +1062,73 @@ function updateSession(id) {
 // ═══════════════════════════════════════════════════════════════
 // MEETS
 // ═══════════════════════════════════════════════════════════════
+let meetSort = { col: 'date', dir: 'desc' };
+
+function sortMeets(col) {
+  if (meetSort.col === col) {
+    meetSort.dir = meetSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    meetSort.col = col;
+    meetSort.dir = col === 'date' ? 'desc' : 'asc';
+  }
+  renderMeets();
+}
+
+function getMeetSortValue(m, col) {
+  switch(col) {
+    case 'date': return m.date||'';
+    case 'meet': return (m.meet||'').toLowerCase();
+    case 'pool': return m.pool||'';
+    case 'event': return (m.event||'').toLowerCase();
+    case 'time': return toSec(m.time)||9999;
+    case 'improvement': return m.prev&&m.time ? (toSec(m.prev)-toSec(m.time)) : -9999;
+    case 'pr': return m.pr ? 0 : 1;
+    default: return '';
+  }
+}
+
+function sortArrow(col) {
+  if (meetSort.col !== col) return `<span style="color:var(--subtle);margin-left:3px">⇅</span>`;
+  return `<span style="color:var(--accent);margin-left:3px">${meetSort.dir==='asc'?'↑':'↓'}</span>`;
+}
+
 function renderMeets() {
-  const meets=[...(DB.meetResults||[])].reverse();
+  const raw = [...(DB.meetResults||[])];
+  const meets = raw.sort((a,b) => {
+    const av = getMeetSortValue(a, meetSort.col);
+    const bv = getMeetSortValue(b, meetSort.col);
+    const cmp = typeof av==='number' ? av-bv : av.localeCompare(bv);
+    return meetSort.dir==='asc' ? cmp : -cmp;
+  });
+
+  const th = (label, col) =>
+    `<th onclick="sortMeets('${col}')" style="cursor:pointer;white-space:nowrap;user-select:none"
+      onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color=''">
+      ${label}${sortArrow(col)}</th>`;
+
   document.getElementById('tab-meets').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
       <div>
         <h2 style="font-size:22px;font-weight:800">Meet Results</h2>
-        <p style="color:var(--muted);font-size:12px;margin-top:4px">${meets.length} results logged</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:4px">${meets.length} results · click any column header to sort</p>
       </div>
       <button class="btn btn-purple" onclick="openMeetModal()">+ Add Result</button>
     </div>
     <div style="overflow-x:auto">
       <table class="tbl">
         <thead><tr>
-          <th>Date</th><th>Meet</th><th>Pool</th><th>Event</th><th>Time</th>
-          <th>Prev Best</th><th>Improvement</th><th>Splits</th><th>Stroke Counts</th><th>Status</th><th>Notes</th><th></th>
+          ${th('Date','date')}
+          ${th('Meet','meet')}
+          ${th('Pool','pool')}
+          ${th('Event','event')}
+          ${th('Time','time')}
+          <th>Prev Best</th>
+          ${th('Improvement','improvement')}
+          <th>Splits</th>
+          <th>Stroke Counts</th>
+          ${th('PR','pr')}
+          <th>Notes</th>
+          <th></th>
         </tr></thead>
         <tbody>${meets.map(m=>{
           const imp=m.prev&&m.time?(toSec(m.prev)-toSec(m.time)).toFixed(2):null;
