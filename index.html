@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🏊‍♀️ Swimmer Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
@@ -13,7 +16,6 @@
     --subtle:#30363d; --gold:#e3b341; --mono:'DM Mono',monospace;
     --sans:'Space Grotesk',sans-serif;
   }
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
   ::-webkit-scrollbar{width:5px;height:5px}
@@ -157,6 +159,31 @@
 </head>
 <body>
 
+<!-- ════════════════════════ SETUP ════════════════════════ -->
+<div id="setup-screen" style="position:fixed;inset:0;background:var(--bg);display:none;
+  align-items:center;justify-content:center;z-index:9999;
+  background-image:radial-gradient(ellipse at 20% 20%,#1e3a5f22,transparent 60%),
+                   radial-gradient(ellipse at 80% 80%,#1a3a2022,transparent 60%)">
+  <div class="login-box" style="max-width:420px">
+    <div class="login-logo">🔗</div>
+    <div class="login-title">Connect to GitHub</div>
+    <div class="login-sub" style="margin-bottom:20px">One-time setup to enable sync across all your devices</div>
+    <div style="text-align:left;background:var(--panel);border-radius:8px;padding:14px;margin-bottom:16px;font-size:11px;color:var(--muted);line-height:1.7">
+      Your data will be saved as a <b style="color:var(--accent)">private Gist</b> on your GitHub account — 
+      invisible to anyone else, and synced automatically every time you make a change.
+    </div>
+    <input class="login-input" type="password" id="gh-token-input" placeholder="Paste your GitHub token (ghp_...)"
+      onkeydown="if(event.key==='Enter')saveToken()" style="margin-bottom:12px">
+    <button class="login-btn" onclick="saveToken()">Connect & Continue</button>
+    <div class="login-err" id="setup-err" style="margin-top:8px"></div>
+    <div style="margin-top:16px;font-size:10px;color:var(--muted);line-height:1.6">
+      Need a token? Go to GitHub → Settings → Developer settings → 
+      Personal access tokens → Tokens (classic) → Generate new token → 
+      check <span style="color:var(--accent);font-family:var(--mono)">gist</span> → Generate
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════════════ LOGIN ════════════════════════ -->
 <div id="login-screen">
   <div class="login-box">
@@ -193,6 +220,7 @@
       <button class="nav-btn" onclick="showTab('settings')">Settings</button>
     </nav>
     <div class="header-actions">
+      <span id="sync-status" style="font-size:10px;font-family:var(--mono);color:var(--green);min-width:70px;text-align:right"></span>
       <button class="btn btn-green btn-sm" onclick="openAddModal()">+ Add</button>
       <button class="btn btn-outline btn-sm" onclick="exportData()">Export</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('import-file').click()">Import</button>
@@ -384,8 +412,86 @@ const strokeColor = v => v&&v<=23?'var(--green)':v&&v>=30?'var(--red)':'var(--te
 const strokeWeight = v => v&&v<=23?'800':'400';
 
 // ═══════════════════════════════════════════════════════════════
+// GITHUB GIST SYNC
+// ═══════════════════════════════════════════════════════════════
+const GIST_TOKEN_KEY = 'swimtracker_gh_token';
+const GIST_ID_KEY    = 'swimtracker_gist_id';
+const GIST_FILENAME  = 'swimmer-tracker-data.json';
+let syncTimeout = null;
+
+function getToken() { return localStorage.getItem(GIST_TOKEN_KEY); }
+function getGistId() { return localStorage.getItem(GIST_ID_KEY); }
+
+async function gistRequest(method, path, body) {
+  const res = await fetch('https://api.github.com/'+path, {
+    method,
+    headers: {
+      'Authorization': 'token '+getToken(),
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error('GitHub API error: '+res.status);
+  return res.json();
+}
+
+async function loadFromGist() {
+  const gistId = getGistId();
+  if (!gistId) return false;
+  try {
+    const gist = await gistRequest('GET', 'gists/'+gistId);
+    const raw = gist.files?.[GIST_FILENAME]?.content;
+    if (!raw) return false;
+    DB = JSON.parse(raw);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+    return true;
+  } catch { return false; }
+}
+
+async function saveToGist() {
+  const token = getToken();
+  if (!token) { saveLocal(); return; }
+  saveLocal();
+  try {
+    let gistId = getGistId();
+    const content = JSON.stringify(DB, null, 2);
+    if (!gistId) {
+      // Create new gist
+      const gist = await gistRequest('POST', 'gists', {
+        description: 'Swimmer Tracker Data',
+        public: false,
+        files: { [GIST_FILENAME]: { content } }
+      });
+      gistId = gist.id;
+      localStorage.setItem(GIST_ID_KEY, gistId);
+    } else {
+      // Update existing gist
+      await gistRequest('PATCH', 'gists/'+gistId, {
+        files: { [GIST_FILENAME]: { content } }
+      });
+    }
+    showSyncStatus('✓ Synced');
+  } catch(e) {
+    showSyncStatus('⚠ Sync failed', true);
+  }
+}
+
+function showSyncStatus(msg, err=false) {
+  let el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = err ? 'var(--red)' : 'var(--green)';
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(()=>{ if(el) el.textContent=''; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // STORAGE
 // ═══════════════════════════════════════════════════════════════
+function saveLocal() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+}
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -393,7 +499,7 @@ function loadData() {
   } catch { DB = JSON.parse(JSON.stringify(DEFAULT_DATA)); }
 }
 function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+  saveToGist();
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -417,20 +523,60 @@ function importData(e) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SETUP SCREEN (first time token entry)
+// ═══════════════════════════════════════════════════════════════
+function showSetupScreen() {
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('setup-screen').style.display='flex';
+}
+function hideSetupScreen() {
+  document.getElementById('setup-screen').style.display='none';
+}
+async function saveToken() {
+  const token = document.getElementById('gh-token-input').value.trim();
+  const err = document.getElementById('setup-err');
+  if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+    err.textContent = 'Token should start with ghp_ — please check and try again';
+    return;
+  }
+  err.textContent = '';
+  localStorage.setItem(GIST_TOKEN_KEY, token);
+  // Test the token
+  try {
+    await gistRequest('GET', 'user');
+    hideSetupScreen();
+    document.getElementById('login-screen').style.display='flex';
+    toast('GitHub connected ✓');
+  } catch {
+    err.textContent = 'Could not connect to GitHub — check your token and try again';
+    localStorage.removeItem(GIST_TOKEN_KEY);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════════════════
-function tryLogin() {
+async function tryLogin() {
   const pw = document.getElementById('pw-input').value;
+  const errEl = document.getElementById('login-err');
+  // Load local first for instant response
   loadData();
-  if (pw === (DB.password||DEFAULT_PW)) {
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='block';
-    sessionStorage.setItem('auth','1');
-    renderAll();
-  } else {
-    document.getElementById('login-err').textContent='Incorrect password';
-    setTimeout(()=>document.getElementById('login-err').textContent='',2000);
+  if (pw !== (DB.password||DEFAULT_PW)) {
+    errEl.textContent='Incorrect password';
+    setTimeout(()=>errEl.textContent='',2000);
+    return;
   }
+  errEl.textContent='Syncing...';
+  // Try to load from gist (pulls latest data from cloud)
+  if (getToken()) {
+    const ok = await loadFromGist();
+    if (ok) { errEl.textContent=''; }
+    else { errEl.textContent=''; } // still proceed with local data
+  }
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  sessionStorage.setItem('auth','1');
+  renderAll();
 }
 function logout() {
   sessionStorage.removeItem('auth');
@@ -440,10 +586,17 @@ function logout() {
 }
 // Auto-login if session active
 window.addEventListener('load',()=>{
+  // Show setup screen if no token yet
+  if (!getToken()) {
+    showSetupScreen();
+    return;
+  }
   if (sessionStorage.getItem('auth')==='1') {
     loadData();
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
+    // Refresh from gist in background
+    loadFromGist().then(ok=>{ if(ok) renderAll(); });
     renderAll();
   }
 });
@@ -1270,6 +1423,23 @@ function renderSettings() {
         </div>
       </div>
       <div class="card">
+        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:14px">☁️ GitHub Sync</h3>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:11px;color:var(--muted);line-height:1.6">
+            ${getToken()
+              ? `<span style="color:var(--green);font-weight:700">✓ Connected</span> — your data syncs automatically across all devices via a private GitHub Gist.`
+              : `<span style="color:var(--red);font-weight:700">⚠ Not connected</span> — data is only stored locally on this device.`
+            }
+          </div>
+          ${getToken() ? `
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="forceSyncNow()">Sync Now</button>
+            <button class="btn btn-red" onclick="disconnectGitHub()">Disconnect GitHub</button>
+          </div>` : `
+          <button class="btn btn-primary" onclick="showSetupScreen()">Connect GitHub</button>`}
+        </div>
+      </div>
+      <div class="card">
         <h3 style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:14px">Data Management</h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-green" onclick="exportData()">Export Data (JSON)</button>
@@ -1278,11 +1448,22 @@ function renderSettings() {
         </div>
         <p style="font-size:10px;color:var(--muted);margin-top:10px">
           Export regularly to keep a backup. Import restores from a previously exported file.
-          Data is stored in your browser — clearing browser data will erase it.
         </p>
       </div>
     </div>
   `;
+}
+async function forceSyncNow() {
+  toast('Syncing...');
+  await saveToGist();
+  toast('Sync complete ✓');
+}
+function disconnectGitHub() {
+  if(!confirm('Disconnect GitHub sync? Your data stays on this device but will no longer sync.'))return;
+  localStorage.removeItem(GIST_TOKEN_KEY);
+  localStorage.removeItem(GIST_ID_KEY);
+  renderSettings();
+  toast('GitHub disconnected');
 }
 function saveProfile() {
   DB.athlete={
