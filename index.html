@@ -419,8 +419,15 @@ const GIST_ID_KEY    = 'swimtracker_gist_id';
 const GIST_FILENAME  = 'swimmer-tracker-data.json';
 let syncTimeout = null;
 
+const MASTER_GIST_ID = 'e7a301af744bba2a0fc74188bf48e9a2';
+
 function getToken() { return localStorage.getItem(GIST_TOKEN_KEY); }
-function getGistId() { return localStorage.getItem(GIST_ID_KEY); }
+function getGistId() {
+  // Always use the master gist ID — ensures all devices sync to same gist
+  const stored = localStorage.getItem(GIST_ID_KEY);
+  if (!stored) localStorage.setItem(GIST_ID_KEY, MASTER_GIST_ID);
+  return MASTER_GIST_ID;
+}
 
 async function gistRequest(method, path, body) {
   const res = await fetch('https://api.github.com/'+path, {
