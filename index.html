@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🏊‍♀️ Swimmer Tracker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
@@ -16,6 +13,7 @@
     --subtle:#30363d; --gold:#e3b341; --mono:'DM Mono',monospace;
     --sans:'Space Grotesk',sans-serif;
   }
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
   ::-webkit-scrollbar{width:5px;height:5px}
@@ -159,31 +157,6 @@
 </head>
 <body>
 
-<!-- ════════════════════════ SETUP ════════════════════════ -->
-<div id="setup-screen" style="position:fixed;inset:0;background:var(--bg);display:none;
-  align-items:center;justify-content:center;z-index:9999;
-  background-image:radial-gradient(ellipse at 20% 20%,#1e3a5f22,transparent 60%),
-                   radial-gradient(ellipse at 80% 80%,#1a3a2022,transparent 60%)">
-  <div class="login-box" style="max-width:420px">
-    <div class="login-logo">🔗</div>
-    <div class="login-title">Connect to GitHub</div>
-    <div class="login-sub" style="margin-bottom:20px">One-time setup to enable sync across all your devices</div>
-    <div style="text-align:left;background:var(--panel);border-radius:8px;padding:14px;margin-bottom:16px;font-size:11px;color:var(--muted);line-height:1.7">
-      Your data will be saved as a <b style="color:var(--accent)">private Gist</b> on your GitHub account — 
-      invisible to anyone else, and synced automatically every time you make a change.
-    </div>
-    <input class="login-input" type="password" id="gh-token-input" placeholder="Paste your GitHub token (ghp_...)"
-      onkeydown="if(event.key==='Enter')saveToken()" style="margin-bottom:12px">
-    <button class="login-btn" onclick="saveToken()">Connect & Continue</button>
-    <div class="login-err" id="setup-err" style="margin-top:8px"></div>
-    <div style="margin-top:16px;font-size:10px;color:var(--muted);line-height:1.6">
-      Need a token? Go to GitHub → Settings → Developer settings → 
-      Personal access tokens → Tokens (classic) → Generate new token → 
-      check <span style="color:var(--accent);font-family:var(--mono)">gist</span> → Generate
-    </div>
-  </div>
-</div>
-
 <!-- ════════════════════════ LOGIN ════════════════════════ -->
 <div id="login-screen">
   <div class="login-box">
@@ -220,7 +193,6 @@
       <button class="nav-btn" onclick="showTab('settings')">Settings</button>
     </nav>
     <div class="header-actions">
-      <span id="sync-status" style="font-size:10px;font-family:var(--mono);color:var(--green);min-width:70px;text-align:right"></span>
       <button class="btn btn-green btn-sm" onclick="openAddModal()">+ Add</button>
       <button class="btn btn-outline btn-sm" onclick="exportData()">Export</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('import-file').click()">Import</button>
@@ -259,7 +231,7 @@ const DEFAULT_PW  = 'swimmer2026';
 const JR_TOP    = {fr50:'35.19',fr100:'1:21.19',fr200:'2:57.49',bk50:'43.39',bk100:'1:33.09',br50:'48.09',br100:'1:46.49',fl50:'41.49',im200:'3:17.59'};
 const JR_BOT    = {fr50:'45.29',fr100:'1:44.09',fr200:'3:50.99',bk50:'55.79',bk100:'2:01.59',br50:'1:02.19',br100:'2:19.39',fl50:'54.49',im200:'4:15.69'};
 const LC_CHAMPS = {fr50:'35.19',fr100:'1:21.19',fr200:'2:57.49',bk50:'43.39',bk100:'1:35.49',br50:'50.19',br100:'1:52.19',fl50:'42.49',im200:'3:17.19'};
-const SC_TO_LC  = {fr50:1.130,fr100:1.107,fr200:1.078,bk50:1.130,bk100:1.107,br50:1.130,br100:1.107,fl50:1.130,fl100:1.107,im100:1.107,im200:1.078};
+const SC_TO_LC  = {fr50:1.130,fr100:1.107,fr200:1.078,bk50:1.130,bk100:1.107,br50:1.130,br100:1.107,fl50:1.130,fl100:1.107,im200:1.078};
 
 const EVENTS = [
   {key:'fr50', label:'50 Free',    color:'#38bdf8'},
@@ -412,93 +384,8 @@ const strokeColor = v => v&&v<=23?'var(--green)':v&&v>=30?'var(--red)':'var(--te
 const strokeWeight = v => v&&v<=23?'800':'400';
 
 // ═══════════════════════════════════════════════════════════════
-// GITHUB GIST SYNC
-// ═══════════════════════════════════════════════════════════════
-const GIST_TOKEN_KEY = 'swimtracker_gh_token';
-const GIST_ID_KEY    = 'swimtracker_gist_id';
-const GIST_FILENAME  = 'swimmer-tracker-data.json';
-let syncTimeout = null;
-
-const MASTER_GIST_ID = 'e7a301af744bba2a0fc74188bf48e9a2';
-
-function getToken() { return localStorage.getItem(GIST_TOKEN_KEY); }
-function getGistId() {
-  // Always use the master gist ID — ensures all devices sync to same gist
-  const stored = localStorage.getItem(GIST_ID_KEY);
-  if (!stored) localStorage.setItem(GIST_ID_KEY, MASTER_GIST_ID);
-  return MASTER_GIST_ID;
-}
-
-async function gistRequest(method, path, body) {
-  const res = await fetch('https://api.github.com/'+path, {
-    method,
-    headers: {
-      'Authorization': 'token '+getToken(),
-      'Accept': 'application/vnd.github.v3+json',
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error('GitHub API error: '+res.status);
-  return res.json();
-}
-
-async function loadFromGist() {
-  const gistId = getGistId();
-  if (!gistId) return false;
-  try {
-    const gist = await gistRequest('GET', 'gists/'+gistId);
-    const raw = gist.files?.[GIST_FILENAME]?.content;
-    if (!raw) return false;
-    DB = JSON.parse(raw);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-    return true;
-  } catch { return false; }
-}
-
-async function saveToGist() {
-  const token = getToken();
-  if (!token) { saveLocal(); return; }
-  saveLocal();
-  try {
-    let gistId = getGistId();
-    const content = JSON.stringify(DB, null, 2);
-    if (!gistId) {
-      // Create new gist
-      const gist = await gistRequest('POST', 'gists', {
-        description: 'Swimmer Tracker Data',
-        public: false,
-        files: { [GIST_FILENAME]: { content } }
-      });
-      gistId = gist.id;
-      localStorage.setItem(GIST_ID_KEY, gistId);
-    } else {
-      // Update existing gist
-      await gistRequest('PATCH', 'gists/'+gistId, {
-        files: { [GIST_FILENAME]: { content } }
-      });
-    }
-    showSyncStatus('✓ Synced');
-  } catch(e) {
-    showSyncStatus('⚠ Sync failed', true);
-  }
-}
-
-function showSyncStatus(msg, err=false) {
-  let el = document.getElementById('sync-status');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = err ? 'var(--red)' : 'var(--green)';
-  clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(()=>{ if(el) el.textContent=''; }, 3000);
-}
-
-// ═══════════════════════════════════════════════════════════════
 // STORAGE
 // ═══════════════════════════════════════════════════════════════
-function saveLocal() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-}
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -506,7 +393,7 @@ function loadData() {
   } catch { DB = JSON.parse(JSON.stringify(DEFAULT_DATA)); }
 }
 function saveData() {
-  saveToGist();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
@@ -530,60 +417,20 @@ function importData(e) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SETUP SCREEN (first time token entry)
-// ═══════════════════════════════════════════════════════════════
-function showSetupScreen() {
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('setup-screen').style.display='flex';
-}
-function hideSetupScreen() {
-  document.getElementById('setup-screen').style.display='none';
-}
-async function saveToken() {
-  const token = document.getElementById('gh-token-input').value.trim();
-  const err = document.getElementById('setup-err');
-  if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
-    err.textContent = 'Token should start with ghp_ — please check and try again';
-    return;
-  }
-  err.textContent = '';
-  localStorage.setItem(GIST_TOKEN_KEY, token);
-  // Test the token
-  try {
-    await gistRequest('GET', 'user');
-    hideSetupScreen();
-    document.getElementById('login-screen').style.display='flex';
-    toast('GitHub connected ✓');
-  } catch {
-    err.textContent = 'Could not connect to GitHub — check your token and try again';
-    localStorage.removeItem(GIST_TOKEN_KEY);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════════════════
-async function tryLogin() {
+function tryLogin() {
   const pw = document.getElementById('pw-input').value;
-  const errEl = document.getElementById('login-err');
-  // Load local first for instant response
   loadData();
-  if (pw !== (DB.password||DEFAULT_PW)) {
-    errEl.textContent='Incorrect password';
-    setTimeout(()=>errEl.textContent='',2000);
-    return;
+  if (pw === (DB.password||DEFAULT_PW)) {
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    sessionStorage.setItem('auth','1');
+    renderAll();
+  } else {
+    document.getElementById('login-err').textContent='Incorrect password';
+    setTimeout(()=>document.getElementById('login-err').textContent='',2000);
   }
-  errEl.textContent='Syncing...';
-  // Try to load from gist (pulls latest data from cloud)
-  if (getToken()) {
-    const ok = await loadFromGist();
-    if (ok) { errEl.textContent=''; }
-    else { errEl.textContent=''; } // still proceed with local data
-  }
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='block';
-  sessionStorage.setItem('auth','1');
-  renderAll();
 }
 function logout() {
   sessionStorage.removeItem('auth');
@@ -593,17 +440,10 @@ function logout() {
 }
 // Auto-login if session active
 window.addEventListener('load',()=>{
-  // Show setup screen if no token yet
-  if (!getToken()) {
-    showSetupScreen();
-    return;
-  }
   if (sessionStorage.getItem('auth')==='1') {
     loadData();
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
-    // Refresh from gist in background
-    loadFromGist().then(ok=>{ if(ok) renderAll(); });
     renderAll();
   }
 });
@@ -744,12 +584,14 @@ function renderDashboard() {
         <table class="tbl">
           <thead><tr><th>Rep</th><th>Time</th><th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>Swing</th><th>Notes</th></tr></thead>
           <tbody>${(lastS.reps||[]).map(r=>{
-            const vals=[r.l1,r.l2,r.l3,r.l4].filter(v=>v!=null);
+            const numLegs = lastS.numLegs || 4;
+            const vals=Array.from({length:numLegs},(_,i)=>r[`l${i+1}`]).filter(v=>v!=null);
             const sw=vals.length>1?Math.max(...vals)-Math.min(...vals):null;
+            const legCells=Array.from({length:numLegs},(_,i)=>{const v=r[`l${i+1}`];return `<td class="mono" style="color:${strokeColor(v)};font-weight:${strokeWeight(v)}">${v??'—'}</td>`;}).join('');
             return `<tr>
               <td class="mono" style="color:var(--accent);font-weight:700">R${r.rep}</td>
               <td class="mono" style="color:${timeColor(r.time)};font-weight:800;font-size:13px">${r.time||'—'}</td>
-              ${[r.l1,r.l2,r.l3,r.l4].map(v=>`<td class="mono" style="color:${strokeColor(v)};font-weight:${strokeWeight(v)}">${v??'—'}</td>`).join('')}
+              ${legCells}
               <td class="mono" style="color:${sw!=null?swingColor(sw):'var(--muted)'};font-weight:700">${sw??'—'}</td>
               <td style="font-size:10px;color:var(--muted)">${esc(r.notes||'')}</td>
             </tr>`;
@@ -866,9 +708,33 @@ function renderSessions() {
 function sessionCard(s) {
   const times=(s.reps||[]).map(r=>toSec(r.time)).filter(Boolean);
   const spread=times.length>1?(Math.max(...times)-Math.min(...times)).toFixed(1):null;
+  // Detect how many legs this session has
+  const numLegs = s.numLegs || Math.max(...(s.reps||[]).map(r=>{
+    let n=0; for(let i=1;i<=10;i++){if(r[`l${i}`]!=null)n=i;} return n;
+  }), 4);
   const allL1=(s.reps||[]).map(r=>r.l1).filter(v=>v!=null);
   const bestL1=allL1.length?Math.min(...allL1):null;
+  const setLabel = s.setType && SET_TYPES[s.setType] ? SET_TYPES[s.setType].label : `${(s.reps||[]).length}×reps`;
   const open=openSessions.has(s.id);
+
+  // Build dynamic leg headers and cells
+  const legHeaders = Array.from({length:numLegs},(_,i)=>`<th>L${i+1}</th>`).join('');
+  const repRows = (s.reps||[]).map(r=>{
+    const vals=Array.from({length:numLegs},(_,i)=>r[`l${i+1}`]).filter(v=>v!=null);
+    const sw=vals.length>1?Math.max(...vals)-Math.min(...vals):null;
+    const legCells = Array.from({length:numLegs},(_,i)=>{
+      const v=r[`l${i+1}`];
+      return `<td class="mono" style="color:${strokeColor(v)};font-weight:${strokeWeight(v)}">${v??'—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="mono" style="color:var(--accent);font-weight:700">R${r.rep}</td>
+      <td class="mono" style="color:${timeColor(r.time)};font-weight:800;font-size:13px">${r.time||'—'}</td>
+      ${legCells}
+      <td class="mono" style="color:${sw!=null?swingColor(sw):'var(--muted)'};font-weight:700">${sw??'—'}</td>
+      <td style="font-size:10px;color:var(--muted)">${esc(r.notes||'')}</td>
+    </tr>`;
+  }).join('');
+
   return `
     <div class="session-item">
       <div class="session-hdr" onclick="toggleSession(${s.id})">
@@ -876,7 +742,8 @@ function sessionCard(s) {
           <span style="font-size:14px;font-weight:800;color:var(--accent)">Session ${s.id}</span>
           ${pill(s.date,'#8b949e')}
           ${pill(s.pool.toUpperCase(),s.pool.includes('m')&&!s.pool.includes('y')?'#e3b341':'#58a6ff')}
-          ${pill(s.interval,s.interval.includes('error')?'#f85149':'#bc8cff')}
+          ${pill(setLabel,'#bc8cff')}
+          ${pill(s.interval,s.interval.includes('error')?'#f85149':'#39d353')}
           ${!s.goggles?pill('No goggles','#e3b341'):''}
           ${spread!=null?pill(`Spread: ${spread}s`,parseFloat(spread)<=2?'#3fb950':parseFloat(spread)<=4?'#e3b341':'#f85149'):''}
           ${bestL1!=null?pill(`Best L1: ${bestL1}`,bestL1<=23?'#3fb950':'#e3b341'):''}
@@ -892,18 +759,8 @@ function sessionCard(s) {
         ${s.notes?`<p style="font-size:11px;color:var(--muted);margin-bottom:12px;font-family:var(--mono)">${esc(s.notes)}</p>`:''}
         <div style="overflow-x:auto">
           <table class="tbl">
-            <thead><tr><th>Rep</th><th>Time</th><th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>Swing</th><th>Notes</th></tr></thead>
-            <tbody>${(s.reps||[]).map(r=>{
-              const vals=[r.l1,r.l2,r.l3,r.l4].filter(v=>v!=null);
-              const sw=vals.length>1?Math.max(...vals)-Math.min(...vals):null;
-              return `<tr>
-                <td class="mono" style="color:var(--accent);font-weight:700">R${r.rep}</td>
-                <td class="mono" style="color:${timeColor(r.time)};font-weight:800;font-size:13px">${r.time||'—'}</td>
-                ${[r.l1,r.l2,r.l3,r.l4].map(v=>`<td class="mono" style="color:${strokeColor(v)};font-weight:${strokeWeight(v)}">${v??'—'}</td>`).join('')}
-                <td class="mono" style="color:${sw!=null?swingColor(sw):'var(--muted)'};font-weight:700">${sw??'—'}</td>
-                <td style="font-size:10px;color:var(--muted)">${esc(r.notes||'')}</td>
-              </tr>`;
-            }).join('')}</tbody>
+            <thead><tr><th>Rep</th><th>Time</th>${legHeaders}<th>Swing</th><th>Notes</th></tr></thead>
+            <tbody>${repRows}</tbody>
           </table>
         </div>
         ${(s.postSet||[]).length?`
@@ -934,201 +791,25 @@ function deleteSession(id) {
   DB.sessions=(DB.sessions||[]).filter(s=>s.id!==id);
   saveData(); renderSessions(); toast('Session deleted');
 }
-function editSession(id) {
-  const s=(DB.sessions||[]).find(s=>s.id===id);
-  if(!s)return;
-  const numReps=Math.max(6,(s.reps||[]).length);
-  const repRows=(n)=>Array.from({length:n},(_,i)=>{
-    const r=(s.reps||[])[i]||{};
-    return `<tr>
-      <td class="mono" style="color:var(--accent);font-weight:700;padding:4px 6px">R${i+1}</td>
-      <td style="padding:3px 3px"><input class="form-input-sm rep-inp rep-inp-time" id="r${i}-time" placeholder="1:38" value="${r.time||''}"></td>
-      ${['l1','l2','l3','l4'].map(f=>`<td style="padding:3px 3px"><input class="form-input-sm rep-inp" id="r${i}-${f}" placeholder="—" value="${r[f]!=null?r[f]:''}"></td>`).join('')}
-      <td style="padding:3px 3px"><input class="form-input-sm rep-inp-note form-input" id="r${i}-note" placeholder="notes" value="${(r.notes||'').replace(/"/g,'&quot;')}"></td>
-    </tr>`;
-  }).join('');
-  const ps=s.postSet||[];
-  showModal(`
-    <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="modal-title" style="color:var(--green)">Edit Session ${s.id}</div>
-    <div class="grid-3" style="margin-bottom:12px">
-      <div class="form-group"><label class="form-label">Date</label>
-        <input class="form-input" type="date" id="s-date" value="${s.date||''}"></div>
-      <div class="form-group"><label class="form-label">Pool</label>
-        <select class="form-input" id="s-pool">
-          <option value="25y"${s.pool==='25y'?' selected':''}>25 Yards</option>
-          <option value="25m"${s.pool==='25m'?' selected':''}>25 Meters</option>
-          <option value="50m"${s.pool==='50m'?' selected':''}>50 Meters</option>
-        </select></div>
-      <div class="form-group"><label class="form-label">Interval</label>
-        <input class="form-input" id="s-interval" value="${(s.interval||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-group"><label class="form-label">Goggles?</label>
-        <select class="form-input" id="s-goggles">
-          <option value="yes"${s.goggles!==false?' selected':''}>Yes</option>
-          <option value="no"${s.goggles===false?' selected':''}>No</option>
-        </select></div>
-      <div class="form-group" style="grid-column:span 2"><label class="form-label">Notes</label>
-        <input class="form-input" id="s-notes" value="${(s.notes||'').replace(/"/g,'&quot;')}"></div>
-    </div>
-    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);margin-bottom:6px">Rep Data</div>
-    <div style="overflow-x:auto;margin-bottom:12px">
-      <table style="border-collapse:collapse">
-        <thead><tr>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Rep</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Time</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L1</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L2</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L3</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L4</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Notes</th>
-        </tr></thead>
-        <tbody>${repRows(numReps)}</tbody>
-      </table>
-    </div>
-    <div class="grid-3" style="margin-bottom:12px">
-      <div class="form-group"><label class="form-label">Effort Rating (1-10)</label>
-        <input class="form-input" id="s-effort" type="number" min="1" max="10" value="${s.effortRating!=null?s.effortRating:''}"></div>
-      <div class="form-group"><label class="form-label">Could do 2 more?</label>
-        <select class="form-input" id="s-2more">
-          <option value="">— not asked</option>
-          <option value="yes"${s.could2More==='yes'?' selected':''}>Yes</option>
-          <option value="maybe"${s.could2More==='maybe'?' selected':''}>Maybe</option>
-          <option value="no"${s.could2More==='no'?' selected':''}>No</option>
-        </select></div>
-    </div>
-    <details style="margin-bottom:12px"${ps.length?'open':''}>
-      <summary style="cursor:pointer;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:700;padding:6px 0">
-        + Post-set time trials (optional)
-      </summary>
-      <div style="margin-top:10px;background:var(--green)11;border-radius:8px;padding:12px;border:1px solid var(--green)33">
-        ${[0,1].map(i=>{const p=ps[i]||{};return`
-          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:flex-end">
-            <div class="form-group"><label class="form-label">Label</label>
-              <input class="form-input form-input-sm" id="ps${i}-label" value="${(p.label||(i===0?'100 Free':'50 Free')).replace(/"/g,'&quot;')}" style="width:90px"></div>
-            <div class="form-group"><label class="form-label">Time</label>
-              <input class="form-input form-input-sm" id="ps${i}-time" placeholder="1:34" value="${p.time||''}" style="width:66px"></div>
-            ${['l1','l2','l3','l4'].map(f=>`<div class="form-group"><label class="form-label">${f.toUpperCase()}</label>
-              <input class="form-input form-input-sm" id="ps${i}-${f}" style="width:44px" value="${p[f]!=null?p[f]:''}"></div>`).join('')}
-          </div>`;}).join('')}
-      </div>
-    </details>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-green" onclick="updateSession(${id})">Save Changes</button>
-    </div>
-  `, 600);
-}
-function updateSession(id) {
-  const reps=Array.from({length:6},(_,i)=>{
-    const time=document.getElementById(`r${i}-time`)?.value.trim();
-    if(!time)return null;
-    return {
-      rep:i+1, time,
-      l1:parseInt(document.getElementById(`r${i}-l1`)?.value)||null,
-      l2:parseInt(document.getElementById(`r${i}-l2`)?.value)||null,
-      l3:parseInt(document.getElementById(`r${i}-l3`)?.value)||null,
-      l4:parseInt(document.getElementById(`r${i}-l4`)?.value)||null,
-      notes:document.getElementById(`r${i}-note`)?.value.trim()||'',
-    };
-  }).filter(Boolean);
-  const postSet=[0,1].map(i=>{
-    const time=document.getElementById(`ps${i}-time`)?.value.trim();
-    if(!time)return null;
-    return {
-      label:document.getElementById(`ps${i}-label`)?.value.trim()||'',
-      time,
-      l1:parseInt(document.getElementById(`ps${i}-l1`)?.value)||null,
-      l2:parseInt(document.getElementById(`ps${i}-l2`)?.value)||null,
-      l3:parseInt(document.getElementById(`ps${i}-l3`)?.value)||null,
-      l4:parseInt(document.getElementById(`ps${i}-l4`)?.value)||null,
-      notes:'',
-    };
-  }).filter(Boolean);
-  const effort=document.getElementById('s-effort')?.value;
-  DB.sessions=(DB.sessions||[]).map(s=>s.id===id?{
-    ...s,
-    date:document.getElementById('s-date').value,
-    pool:document.getElementById('s-pool').value,
-    interval:document.getElementById('s-interval').value.trim(),
-    notes:document.getElementById('s-notes').value.trim(),
-    goggles:document.getElementById('s-goggles').value==='yes',
-    reps, postSet,
-    effortRating:effort?parseInt(effort):null,
-    could2More:document.getElementById('s-2more').value||null,
-  }:s);
-  saveData(); closeModal(); renderSessions(); toast('Session updated ✓');
-}
 
 // ═══════════════════════════════════════════════════════════════
 // MEETS
 // ═══════════════════════════════════════════════════════════════
-let meetSort = { col: 'date', dir: 'desc' };
-
-function sortMeets(col) {
-  if (meetSort.col === col) {
-    meetSort.dir = meetSort.dir === 'asc' ? 'desc' : 'asc';
-  } else {
-    meetSort.col = col;
-    meetSort.dir = col === 'date' ? 'desc' : 'asc';
-  }
-  renderMeets();
-}
-
-function getMeetSortValue(m, col) {
-  switch(col) {
-    case 'date': return m.date||'';
-    case 'meet': return (m.meet||'').toLowerCase();
-    case 'pool': return m.pool||'';
-    case 'event': return (m.event||'').toLowerCase();
-    case 'time': return toSec(m.time)||9999;
-    case 'improvement': return m.prev&&m.time ? (toSec(m.prev)-toSec(m.time)) : -9999;
-    case 'pr': return m.pr ? 0 : 1;
-    default: return '';
-  }
-}
-
-function sortArrow(col) {
-  if (meetSort.col !== col) return `<span style="color:var(--subtle);margin-left:3px">⇅</span>`;
-  return `<span style="color:var(--accent);margin-left:3px">${meetSort.dir==='asc'?'↑':'↓'}</span>`;
-}
-
 function renderMeets() {
-  const raw = [...(DB.meetResults||[])];
-  const meets = raw.sort((a,b) => {
-    const av = getMeetSortValue(a, meetSort.col);
-    const bv = getMeetSortValue(b, meetSort.col);
-    const cmp = typeof av==='number' ? av-bv : av.localeCompare(bv);
-    return meetSort.dir==='asc' ? cmp : -cmp;
-  });
-
-  const th = (label, col) =>
-    `<th onclick="sortMeets('${col}')" style="cursor:pointer;white-space:nowrap;user-select:none"
-      onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color=''">
-      ${label}${sortArrow(col)}</th>`;
-
+  const meets=[...(DB.meetResults||[])].reverse();
   document.getElementById('tab-meets').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
       <div>
         <h2 style="font-size:22px;font-weight:800">Meet Results</h2>
-        <p style="color:var(--muted);font-size:12px;margin-top:4px">${meets.length} results · click any column header to sort</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:4px">${meets.length} results logged</p>
       </div>
       <button class="btn btn-purple" onclick="openMeetModal()">+ Add Result</button>
     </div>
     <div style="overflow-x:auto">
       <table class="tbl">
         <thead><tr>
-          ${th('Date','date')}
-          ${th('Meet','meet')}
-          ${th('Pool','pool')}
-          ${th('Event','event')}
-          ${th('Time','time')}
-          <th>Prev Best</th>
-          ${th('Improvement','improvement')}
-          <th>Splits</th>
-          <th>Stroke Counts</th>
-          ${th('PR','pr')}
-          <th>Notes</th>
-          <th></th>
+          <th>Date</th><th>Meet</th><th>Pool</th><th>Event</th><th>Time</th>
+          <th>Prev Best</th><th>Improvement</th><th>Splits</th><th>Stroke Counts</th><th>Status</th><th>Notes</th><th></th>
         </tr></thead>
         <tbody>${meets.map(m=>{
           const imp=m.prev&&m.time?(toSec(m.prev)-toSec(m.time)).toFixed(2):null;
@@ -1144,10 +825,7 @@ function renderMeets() {
             <td class="mono" style="font-size:10px;color:var(--muted)">${(m.strokeCounts||[]).join(' / ')||'—'}</td>
             <td>${m.pr?pill('PR 🏆','#3fb950'):''}</td>
             <td style="font-size:10px;color:var(--muted);max-width:160px">${esc(m.notes||'')}</td>
-            <td style="white-space:nowrap;display:flex;gap:4px">
-              <button class="btn btn-primary btn-sm" onclick="editMeet('${m.id}')">Edit</button>
-              <button class="btn btn-red btn-sm" onclick="deleteMeet('${m.id}')">×</button>
-            </td>
+            <td><button class="btn btn-primary btn-sm" onclick="editMeet(${m.id})" style="margin-right:4px">Edit</button><button class="btn btn-red btn-sm" onclick="deleteMeet(${m.id})">×</button></td>
           </tr>`;
         }).join('')}</tbody>
       </table>
@@ -1156,44 +834,208 @@ function renderMeets() {
 }
 function deleteMeet(id) {
   if(!confirm('Delete this result?'))return;
-  DB.meetResults=(DB.meetResults||[]).filter(m=>String(m.id)!==String(id));
-  recomputePRs();
+  DB.meetResults=(DB.meetResults||[]).filter(m=>m.id!==id);
+  recomputeAllPRs();
   saveData(); renderMeets(); toast('Result deleted');
 }
-// Auto-PR: for each event+pool combo, mark the fastest entry as PR, clear others
-function recomputePRs() {
-  const meets=DB.meetResults||[];
-  // Group by event+pool key
-  const groups={};
-  meets.forEach(m=>{
-    if(!m.event||!m.time)return;
-    const k=(m.event+':'+m.pool).toLowerCase();
-    if(!groups[k])groups[k]=[];
-    groups[k].push(m);
+
+// ── Auto PR detection ──────────────────────────────────────────────────────────
+// For each event, sort results by date, then mark the PR as the best time
+// seen so far chronologically. Re-runs every time meet data changes.
+function recomputeAllPRs() {
+  const results = DB.meetResults || [];
+  // Group by event
+  const byEvent = {};
+  results.forEach(m => {
+    const key = m.event;
+    if (!byEvent[key]) byEvent[key] = [];
+    byEvent[key].push(m);
   });
-  // For each group, find fastest time, set pr accordingly
-  Object.values(groups).forEach(group=>{
-    const withTimes=group.filter(m=>toSec(m.time)>0);
-    if(!withTimes.length)return;
-    const bestSec=Math.min(...withTimes.map(m=>toSec(m.time)));
-    withTimes.forEach(m=>{
-      m.pr=(Math.abs(toSec(m.time)-bestSec)<0.005);
+  // For each event, sort chronologically and mark PRs
+  Object.values(byEvent).forEach(group => {
+    group.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+    let best = Infinity;
+    group.forEach(m => {
+      const t = toSec(m.time);
+      if (t !== null && t < best) {
+        best = t;
+        m.pr = true;
+      } else {
+        m.pr = false;
+      }
     });
   });
 }
+
+// ── Edit Session ───────────────────────────────────────────────────────────────
+function editSession(id) {
+  const s = (DB.sessions||[]).find(x=>x.id===id);
+  if (!s) return;
+  const numReps = (s.reps||[]).length || 6;
+  const repRows = (reps) => Array.from({length:numReps},(_,i)=>{
+    const r = reps[i] || {};
+    return `<tr>
+      <td class="mono" style="color:var(--accent);font-weight:700;padding:4px 6px">R${i+1}</td>
+      <td style="padding:3px 3px"><input class="form-input-sm rep-inp rep-inp-time" id="r${i}-time" value="${esc(r.time||'')}"></td>
+      ${['l1','l2','l3','l4'].map(f=>`<td style="padding:3px 3px"><input class="form-input-sm rep-inp" id="r${i}-${f}" value="${r[f]!=null?r[f]:''}"></td>`).join('')}
+      <td style="padding:3px 3px"><input class="form-input-sm rep-inp-note form-input" id="r${i}-note" value="${esc(r.notes||'')}"></td>
+    </tr>`;
+  }).join('');
+
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" style="color:var(--green)">Edit Session ${s.id}</div>
+    <div class="grid-3" style="margin-bottom:12px">
+      <div class="form-group"><label class="form-label">Date</label>
+        <input class="form-input" type="date" id="s-date" value="${esc(s.date||'')}"></div>
+      <div class="form-group"><label class="form-label">Pool</label>
+        <select class="form-input" id="s-pool">
+          <option value="25y"${s.pool==='25y'?' selected':''}>25 Yards</option>
+          <option value="25m"${s.pool==='25m'?' selected':''}>25 Meters</option>
+          <option value="50m"${s.pool==='50m'?' selected':''}>50 Meters</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Interval</label>
+        <input class="form-input" id="s-interval" value="${esc(s.interval||'')}"></div>
+      <div class="form-group"><label class="form-label">Goggles?</label>
+        <select class="form-input" id="s-goggles">
+          <option value="yes"${s.goggles!==false?' selected':''}>Yes</option>
+          <option value="no"${s.goggles===false?' selected':''}>No</option>
+        </select></div>
+      <div class="form-group" style="grid-column:span 2"><label class="form-label">Notes</label>
+        <input class="form-input" id="s-notes" value="${esc(s.notes||'')}"></div>
+    </div>
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);margin-bottom:6px">Rep Data</div>
+    <div style="overflow-x:auto;margin-bottom:12px">
+      <table style="border-collapse:collapse">
+        <thead><tr>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Rep</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Time</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L1</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L2</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L3</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L4</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Notes</th>
+        </tr></thead>
+        <tbody>${repRows(s.reps||[])}</tbody>
+      </table>
+    </div>
+    <div class="grid-3" style="margin-bottom:12px">
+      <div class="form-group"><label class="form-label">Effort Rating (1-10)</label>
+        <input class="form-input" id="s-effort" type="number" min="1" max="10" value="${s.effortRating!=null?s.effortRating:''}"></div>
+      <div class="form-group"><label class="form-label">Could do 2 more?</label>
+        <select class="form-input" id="s-2more">
+          <option value=""${!s.could2More?' selected':''}>— not asked</option>
+          <option value="yes"${s.could2More==='yes'?' selected':''}>Yes</option>
+          <option value="maybe"${s.could2More==='maybe'?' selected':''}>Maybe</option>
+          <option value="no"${s.could2More==='no'?' selected':''}>No</option>
+        </select></div>
+    </div>
+    ${(s.postSet||[]).length>0?`
+    <details open style="margin-bottom:12px">
+      <summary style="cursor:pointer;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:700;padding:6px 0">
+        Post-set time trials
+      </summary>
+      <div style="margin-top:10px;background:var(--green)11;border-radius:8px;padding:12px;border:1px solid var(--green)33">
+        ${(s.postSet||[]).map((p,i)=>`
+          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group"><label class="form-label">Label</label>
+              <input class="form-input form-input-sm" id="ps${i}-label" value="${esc(p.label||'')}" style="width:90px"></div>
+            <div class="form-group"><label class="form-label">Time</label>
+              <input class="form-input form-input-sm" id="ps${i}-time" value="${esc(p.time||'')}" style="width:66px"></div>
+            ${['l1','l2','l3','l4'].map(f=>`<div class="form-group"><label class="form-label">${f.toUpperCase()}</label>
+              <input class="form-input form-input-sm" id="ps${i}-${f}" value="${p[f]!=null?p[f]:''}" style="width:44px"></div>`).join('')}
+          </div>`).join('')}
+      </div>
+    </details>`:`
+    <details style="margin-bottom:12px">
+      <summary style="cursor:pointer;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:700;padding:6px 0">
+        + Post-set time trials (optional)
+      </summary>
+      <div style="margin-top:10px;background:var(--green)11;border-radius:8px;padding:12px;border:1px solid var(--green)33">
+        ${[0,1].map(i=>`
+          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group"><label class="form-label">Label</label>
+              <input class="form-input form-input-sm" id="ps${i}-label" value="${i===0?'100 Free':'50 Free'}" style="width:90px"></div>
+            <div class="form-group"><label class="form-label">Time</label>
+              <input class="form-input form-input-sm" id="ps${i}-time" style="width:66px"></div>
+            ${['l1','l2','l3','l4'].map(f=>`<div class="form-group"><label class="form-label">${f.toUpperCase()}</label>
+              <input class="form-input form-input-sm" id="ps${i}-${f}" style="width:44px"></div>`).join('')}
+          </div>`).join('')}
+      </div>
+    </details>`}
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-green" onclick="updateSession(${id})">Save Changes</button>
+    </div>
+  `, 600);
+}
+
+function updateSession(id) {
+  const idx = (DB.sessions||[]).findIndex(x=>x.id===id);
+  if (idx===-1) return;
+  const numReps = (DB.sessions[idx].reps||[]).length || 6;
+  const reps = Array.from({length:numReps},(_,i)=>{
+    const time = document.getElementById(`r${i}-time`)?.value.trim();
+    if (!time) return null;
+    return {
+      rep:i+1, time,
+      l1:parseInt(document.getElementById(`r${i}-l1`)?.value)||null,
+      l2:parseInt(document.getElementById(`r${i}-l2`)?.value)||null,
+      l3:parseInt(document.getElementById(`r${i}-l3`)?.value)||null,
+      l4:parseInt(document.getElementById(`r${i}-l4`)?.value)||null,
+      notes:document.getElementById(`r${i}-note`)?.value.trim()||'',
+    };
+  }).filter(Boolean);
+
+  // Collect postSet — handle both existing and new
+  const existingPS = DB.sessions[idx].postSet||[];
+  const numPS = Math.max(existingPS.length, 2);
+  const postSet = Array.from({length:numPS},(_,i)=>{
+    const time = document.getElementById(`ps${i}-time`)?.value.trim();
+    if (!time) return null;
+    return {
+      label:document.getElementById(`ps${i}-label`)?.value.trim()||'',
+      time,
+      l1:parseInt(document.getElementById(`ps${i}-l1`)?.value)||null,
+      l2:parseInt(document.getElementById(`ps${i}-l2`)?.value)||null,
+      l3:parseInt(document.getElementById(`ps${i}-l3`)?.value)||null,
+      l4:parseInt(document.getElementById(`ps${i}-l4`)?.value)||null,
+      notes:'',
+    };
+  }).filter(Boolean);
+
+  const effort = document.getElementById('s-effort')?.value;
+  DB.sessions[idx] = {
+    ...DB.sessions[idx],
+    date:document.getElementById('s-date').value,
+    pool:document.getElementById('s-pool').value,
+    interval:document.getElementById('s-interval').value.trim(),
+    notes:document.getElementById('s-notes').value.trim(),
+    goggles:document.getElementById('s-goggles').value==='yes',
+    reps, postSet,
+    effortRating:effort?parseInt(effort):null,
+    could2More:document.getElementById('s-2more').value||null,
+  };
+  saveData(); closeModal(); renderSessions(); toast('Session updated ✓');
+}
+
+// ── Edit Meet ──────────────────────────────────────────────────────────────────
 function editMeet(id) {
-  const m=(DB.meetResults||[]).find(m=>String(m.id)===String(id));
-  if(!m)return;
-  const splits=m.splits||[];
-  const sc=m.strokeCounts||[];
+  const m = (DB.meetResults||[]).find(x=>x.id===id);
+  if (!m) return;
+  const splits = m.splits||[];
+  const sc = m.strokeCounts||[];
   showModal(`
     <button class="modal-close" onclick="closeModal()">×</button>
     <div class="modal-title" style="color:var(--purple)">Edit Meet Result</div>
+    <div style="background:var(--green)11;border:1px solid var(--green)33;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--green)">
+      ✓ PR status is calculated automatically — no need to select it manually
+    </div>
     <div class="grid-3" style="margin-bottom:12px">
       <div class="form-group"><label class="form-label">Date</label>
-        <input class="form-input" type="date" id="m-date" value="${m.date||''}"></div>
+        <input class="form-input" type="date" id="m-date" value="${esc(m.date||'')}"></div>
       <div class="form-group"><label class="form-label">Meet Name</label>
-        <input class="form-input" id="m-meet" value="${(m.meet||'').replace(/"/g,'&quot;')}"></div>
+        <input class="form-input" id="m-meet" value="${esc(m.meet||'')}"></div>
       <div class="form-group"><label class="form-label">Pool</label>
         <select class="form-input" id="m-pool">
           <option value="25y"${m.pool==='25y'?' selected':''}>25 Yards</option>
@@ -1201,40 +1043,38 @@ function editMeet(id) {
           <option value="50m"${m.pool==='50m'?' selected':''}>50 Meters</option>
         </select></div>
       <div class="form-group"><label class="form-label">Event</label>
-        <input class="form-input" id="m-event" value="${(m.event||'').replace(/"/g,'&quot;')}"></div>
+        <input class="form-input" id="m-event" value="${esc(m.event||'')}"></div>
       <div class="form-group"><label class="form-label">Time</label>
-        <input class="form-input" id="m-time" value="${m.time||''}"></div>
-      <div class="form-group"><label class="form-label">Previous Best</label>
-        <input class="form-input" id="m-prev" value="${m.prev||''}"></div>
+        <input class="form-input" id="m-time" value="${esc(m.time||'')}"></div>
+      <div class="form-group"><label class="form-label">Previous Best <span style="color:var(--muted)">(optional)</span></label>
+        <input class="form-input" id="m-prev" value="${esc(m.prev||'')}"></div>
     </div>
     <div style="font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Splits</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       ${[0,1,2,3].map(i=>`<div class="form-group"><label class="form-label">Split ${i+1}</label>
-        <input class="form-input" id="m-sp${i+1}" placeholder="—" value="${splits[i]||''}" style="width:80px"></div>`).join('')}
+        <input class="form-input" id="m-sp${i+1}" value="${esc(splits[i]||'')}" style="width:80px"></div>`).join('')}
     </div>
     <div style="font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Stroke Counts per length</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       ${[0,1,2,3].map(i=>`<div class="form-group"><label class="form-label">L${i+1}</label>
-        <input class="form-input" id="m-sc${i+1}" placeholder="—" value="${sc[i]!=null?sc[i]:''}" style="width:56px"></div>`).join('')}
+        <input class="form-input" id="m-sc${i+1}" value="${sc[i]!=null?sc[i]:''}" style="width:56px"></div>`).join('')}
     </div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
-      <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
-        <input class="form-input" id="m-notes" value="${(m.notes||'').replace(/"/g,'&quot;')}"></div>
-    </div>
-    <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">
-      💡 PR status is set automatically — the fastest time for each event &amp; pool is marked as PR.
-    </div>
+    <div class="form-group" style="margin-bottom:12px"><label class="form-label">Notes</label>
+      <input class="form-input" id="m-notes" value="${esc(m.notes||'')}"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-purple" onclick="updateMeet('${id}')">Save Changes</button>
+      <button class="btn btn-purple" onclick="updateMeet(${id})">Save Changes</button>
     </div>
   `, 560);
 }
+
 function updateMeet(id) {
+  const idx = (DB.meetResults||[]).findIndex(x=>x.id===id);
+  if (idx===-1) return;
   const splits=[1,2,3,4].map(i=>document.getElementById(`m-sp${i}`).value.trim()).filter(Boolean);
   const strokeCounts=[1,2,3,4].map(i=>parseInt(document.getElementById(`m-sc${i}`).value)).filter(v=>!isNaN(v));
-  DB.meetResults=(DB.meetResults||[]).map(m=>String(m.id)===String(id)?{
-    ...m,
+  DB.meetResults[idx]={
+    ...DB.meetResults[idx],
     date:document.getElementById('m-date').value,
     meet:document.getElementById('m-meet').value.trim(),
     pool:document.getElementById('m-pool').value,
@@ -1243,9 +1083,88 @@ function updateMeet(id) {
     prev:document.getElementById('m-prev').value.trim()||null,
     splits, strokeCounts,
     notes:document.getElementById('m-notes').value.trim(),
-  }:m);
-  recomputePRs();
-  saveData(); closeModal(); renderMeets(); toast('Meet result updated ✓');
+  };
+  recomputeAllPRs();
+  saveData(); closeModal(); renderMeets(); toast('Result updated ✓');
+}
+
+// ── Edit Stroke Count ──────────────────────────────────────────────────────────
+function editStroke(id) {
+  const h = (DB.strokeHistory||[]).find(x=>x.id===id);
+  if (!h) return;
+  const gv = (obj,f) => obj?.[f]!=null?obj[f]:'';
+  const row = (label,color,prefix,obj) => `
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:6px;font-family:var(--mono)">${label}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+        ${['l1','l2','l3','l4'].map(f=>`<div class="form-group"><label class="form-label">${f.toUpperCase()}</label>
+          <input class="form-input" id="${prefix}-${f}" value="${gv(obj,f)}" style="width:54px"></div>`).join('')}
+        <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
+          <input class="form-input" id="${prefix}-notes" value="${esc(obj?.notes||'')}"></div>
+      </div>
+    </div>`;
+
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" style="color:var(--orange)">Edit Stroke Counts</div>
+    <div class="grid-3" style="margin-bottom:14px">
+      <div class="form-group"><label class="form-label">Date</label>
+        <input class="form-input" type="date" id="sc-date" value="${esc(h.date||'')}"></div>
+      <div class="form-group"><label class="form-label">Pool</label>
+        <select class="form-input" id="sc-pool">
+          <option value="25y"${h.pool==='25y'?' selected':''}>25 Yards</option>
+          <option value="25m"${h.pool==='25m'?' selected':''}>25 Meters</option>
+          <option value="50m"${h.pool==='50m'?' selected':''}>50 Meters</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Context</label>
+        <input class="form-input" id="sc-context" value="${esc(h.context||'')}"></div>
+    </div>
+    ${row('🏊 Freestyle','#38bdf8','sc-fr',h.freestyle)}
+    ${row('🔄 Backstroke','#818cf8','sc-bk',h.backstroke)}
+    ${row('🐸 Breaststroke','#22c55e','sc-br',h.breaststroke)}
+    ${row('🦋 Butterfly','#fb923c','sc-fl',h.butterfly)}
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--teal);margin-bottom:6px;font-family:var(--mono)">⚡ Kick Count</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group"><label class="form-label">Count</label>
+          <input class="form-input" id="sc-kick-count" value="${esc(h.kickCount?.count||'')}" style="width:100px"></div>
+        <div class="form-group"><label class="form-label">Unit</label>
+          <select class="form-input" id="sc-kick-unit" style="width:160px">
+            <option value="individual"${h.kickCount?.unit==='individual'?' selected':''}>Individual movements</option>
+            <option value="cycles"${h.kickCount?.unit==='cycles'?' selected':''}>Full cycles</option>
+          </select></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
+          <input class="form-input" id="sc-kick-notes" value="${esc(h.kickCount?.notes||'')}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-orange" onclick="updateStroke(${JSON.stringify(id)})">Save Changes</button>
+    </div>
+  `, 580);
+}
+
+function deleteStroke(id) {
+  if(!confirm('Delete this stroke count entry?'))return;
+  DB.strokeHistory=(DB.strokeHistory||[]).filter(h=>h.id!==id);
+  saveData(); renderStrokes(); toast('Entry deleted');
+}
+
+function updateStroke(id) {
+  const idx = (DB.strokeHistory||[]).findIndex(x=>x.id===id);
+  if (idx===-1) return;
+  const gv=(eid)=>{const el=document.getElementById(eid);return el?el.value.trim():'';};
+  const gi=(eid)=>{const v=parseInt(gv(eid));return isNaN(v)?null:v;};
+  DB.strokeHistory[idx]={
+    ...DB.strokeHistory[idx],
+    date:gv('sc-date'),pool:gv('sc-pool'),context:gv('sc-context'),
+    freestyle:{l1:gi('sc-fr-l1'),l2:gi('sc-fr-l2'),l3:gi('sc-fr-l3'),l4:gi('sc-fr-l4'),notes:gv('sc-fr-notes')},
+    backstroke:{l1:gi('sc-bk-l1'),l2:gi('sc-bk-l2'),l3:gi('sc-bk-l3'),l4:gi('sc-bk-l4'),notes:gv('sc-bk-notes')},
+    breaststroke:{l1:gi('sc-br-l1'),l2:gi('sc-br-l2'),l3:gi('sc-br-l3'),l4:gi('sc-br-l4'),notes:gv('sc-br-notes')},
+    butterfly:{l1:gi('sc-fl-l1'),l2:gi('sc-fl-l2'),l3:gi('sc-fl-l3'),l4:gi('sc-fl-l4'),notes:gv('sc-fl-notes')},
+    kickCount:{count:gv('sc-kick-count'),unit:gv('sc-kick-unit'),notes:gv('sc-kick-notes')},
+  };
+  saveData(); closeModal(); renderStrokes(); toast('Stroke counts updated ✓');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1286,7 +1205,7 @@ function renderStrokes() {
       ${history.length===0?`<p style="color:var(--muted);font-size:12px;text-align:center;padding:24px 0">No sessions recorded. Click "+ Add Counts" to start.</p>`:`
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Date</th><th>Pool</th><th>Context</th><th>Free L1</th><th>Back L1</th><th>Breast L1</th><th>Fly L1</th><th>Kick</th><th>Notes</th></tr></thead>
+          <thead><tr><th>Date</th><th>Pool</th><th>Context</th><th>Free L1</th><th>Back L1</th><th>Breast L1</th><th>Fly L1</th><th>Kick</th><th>Notes</th><th></th></tr></thead>
           <tbody>${history.map((h,i)=>`<tr>
             <td class="mono" style="color:var(--muted);font-size:10px">${esc(h.date)}</td>
             <td>${pill(h.pool,'#58a6ff')}</td>
@@ -1297,6 +1216,10 @@ function renderStrokes() {
             <td class="mono" style="color:var(--orange);font-weight:700">${h.butterfly?.l1??'—'}</td>
             <td class="mono" style="font-size:10px;color:var(--muted)">${h.kickCount?.count||'—'}</td>
             <td style="font-size:10px;color:var(--muted)">${esc(h.backstroke?.notes||'')}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-primary btn-sm" onclick="editStroke(${JSON.stringify(h.id)})" style="margin-right:4px">Edit</button>
+              <button class="btn btn-red btn-sm" onclick="deleteStroke(${JSON.stringify(h.id)})">×</button>
+            </td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`}
@@ -1482,23 +1405,6 @@ function renderSettings() {
         </div>
       </div>
       <div class="card">
-        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:14px">☁️ GitHub Sync</h3>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="font-size:11px;color:var(--muted);line-height:1.6">
-            ${getToken()
-              ? `<span style="color:var(--green);font-weight:700">✓ Connected</span> — your data syncs automatically across all devices via a private GitHub Gist.`
-              : `<span style="color:var(--red);font-weight:700">⚠ Not connected</span> — data is only stored locally on this device.`
-            }
-          </div>
-          ${getToken() ? `
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-primary" onclick="forceSyncNow()">Sync Now</button>
-            <button class="btn btn-red" onclick="disconnectGitHub()">Disconnect GitHub</button>
-          </div>` : `
-          <button class="btn btn-primary" onclick="showSetupScreen()">Connect GitHub</button>`}
-        </div>
-      </div>
-      <div class="card">
         <h3 style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:14px">Data Management</h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-green" onclick="exportData()">Export Data (JSON)</button>
@@ -1507,22 +1413,11 @@ function renderSettings() {
         </div>
         <p style="font-size:10px;color:var(--muted);margin-top:10px">
           Export regularly to keep a backup. Import restores from a previously exported file.
+          Data is stored in your browser — clearing browser data will erase it.
         </p>
       </div>
     </div>
   `;
-}
-async function forceSyncNow() {
-  toast('Syncing...');
-  await saveToGist();
-  toast('Sync complete ✓');
-}
-function disconnectGitHub() {
-  if(!confirm('Disconnect GitHub sync? Your data stays on this device but will no longer sync.'))return;
-  localStorage.removeItem(GIST_TOKEN_KEY);
-  localStorage.removeItem(GIST_ID_KEY);
-  renderSettings();
-  toast('GitHub disconnected');
 }
 function saveProfile() {
   DB.athlete={
@@ -1551,8 +1446,213 @@ function resetData() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MODALS
+// AUTO PR DETECTION
 // ═══════════════════════════════════════════════════════════════
+// Returns true if newTime is faster than all previous results for same event (excluding editId)
+function isNewPR(event, pool, newTime, excludeId=null) {
+  const newSec = toSec(newTime);
+  if (!newSec) return false;
+  const prev = (DB.meetResults||[]).filter(m =>
+    m.event.toLowerCase().trim() === event.toLowerCase().trim() &&
+    m.pool === pool &&
+    m.id !== excludeId &&
+    m.time
+  );
+  if (!prev.length) return true; // First time in this event = PR
+  const bestPrev = Math.min(...prev.map(m => toSec(m.time)).filter(Boolean));
+  return newSec < bestPrev;
+}
+
+// ── Edit Session ──────────────────────────────────────────────────────────────
+function editSession(id) {
+  const s = (DB.sessions||[]).find(x=>x.id===id);
+  if (!s) return;
+  const repRows = Array.from({length:6},(_,i) => {
+    const r = s.reps?.[i] || {};
+    return `<tr>
+      <td class="mono" style="color:var(--accent);font-weight:700;padding:4px 6px">R${i+1}</td>
+      <td style="padding:3px"><input class="form-input-sm rep-inp rep-inp-time" id="r${i}-time" value="${esc(r.time||'')}"></td>
+      ${['l1','l2','l3','l4'].map(f=>`<td style="padding:3px"><input class="form-input-sm rep-inp" id="r${i}-${f}" value="${r[f]!=null?r[f]:''}"></td>`).join('')}
+      <td style="padding:3px"><input class="form-input-sm rep-inp-note form-input" id="r${i}-note" value="${esc(r.notes||'')}"></td>
+    </tr>`;
+  }).join('');
+
+  const ps = s.postSet || [];
+  const psRows = [0,1].map(i => {
+    const p = ps[i] || {};
+    return `<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:flex-end">
+      <div class="form-group"><label class="form-label">Label</label>
+        <input class="form-input form-input-sm" id="ps${i}-label" value="${esc(p.label||( i===0?'100 Free':'50 Free'))}" style="width:90px"></div>
+      <div class="form-group"><label class="form-label">Time</label>
+        <input class="form-input form-input-sm" id="ps${i}-time" value="${esc(p.time||'')}" style="width:66px"></div>
+      ${['l1','l2','l3','l4'].map(f=>`<div class="form-group"><label class="form-label">${f.toUpperCase()}</label>
+        <input class="form-input form-input-sm" id="ps${i}-${f}" value="${p[f]!=null?p[f]:''}" style="width:44px"></div>`).join('')}
+    </div>`;
+  }).join('');
+
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" style="color:var(--accent)">Edit Session ${s.id}</div>
+    <div class="grid-3" style="margin-bottom:12px">
+      <div class="form-group"><label class="form-label">Date</label>
+        <input class="form-input" type="date" id="s-date" value="${esc(s.date||'')}"></div>
+      <div class="form-group"><label class="form-label">Pool</label>
+        <select class="form-input" id="s-pool">
+          <option value="25y" ${s.pool==='25y'?'selected':''}>25 Yards</option>
+          <option value="25m" ${s.pool==='25m'?'selected':''}>25 Meters</option>
+          <option value="50m" ${s.pool==='50m'?'selected':''}>50 Meters</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Interval</label>
+        <input class="form-input" id="s-interval" value="${esc(s.interval||'2:30')}"></div>
+      <div class="form-group"><label class="form-label">Goggles?</label>
+        <select class="form-input" id="s-goggles">
+          <option value="yes" ${s.goggles!==false?'selected':''}>Yes</option>
+          <option value="no"  ${s.goggles===false?'selected':''}>No</option>
+        </select></div>
+      <div class="form-group" style="grid-column:span 2"><label class="form-label">Notes</label>
+        <input class="form-input" id="s-notes" value="${esc(s.notes||'')}"></div>
+    </div>
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);margin-bottom:6px">Rep Data</div>
+    <div style="overflow-x:auto;margin-bottom:12px">
+      <table style="border-collapse:collapse">
+        <thead><tr>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Rep</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Time</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L1</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L2</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L3</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L4</th>
+          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Notes</th>
+        </tr></thead>
+        <tbody>${repRows}</tbody>
+      </table>
+    </div>
+    <div class="grid-3" style="margin-bottom:12px">
+      <div class="form-group"><label class="form-label">Effort Rating (1-10)</label>
+        <input class="form-input" id="s-effort" type="number" min="1" max="10" value="${s.effortRating||''}"></div>
+      <div class="form-group"><label class="form-label">Could do 2 more?</label>
+        <select class="form-input" id="s-2more">
+          <option value=""     ${!s.could2More?'selected':''}>— not asked</option>
+          <option value="yes"  ${s.could2More==='yes'?'selected':''}>Yes</option>
+          <option value="maybe"${s.could2More==='maybe'?'selected':''}>Maybe</option>
+          <option value="no"   ${s.could2More==='no'?'selected':''}>No</option>
+        </select></div>
+    </div>
+    <details style="margin-bottom:12px" ${ps.some(p=>p.time)?'open':''}>
+      <summary style="cursor:pointer;font-size:11px;color:var(--green);font-family:var(--mono);font-weight:700;padding:6px 0">
+        Post-set time trials
+      </summary>
+      <div style="margin-top:10px;background:var(--green)11;border-radius:8px;padding:12px;border:1px solid var(--green)33">
+        ${psRows}
+      </div>
+    </details>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-green" onclick="saveSession(${id})">Save Changes</button>
+    </div>
+  `, 600);
+}
+
+// ── Edit Meet ─────────────────────────────────────────────────────────────────
+function editMeet(id) {
+  const m = (DB.meetResults||[]).find(x=>x.id===id);
+  if (!m) return;
+  const sp = m.splits||[];
+  const sc = m.strokeCounts||[];
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" style="color:var(--purple)">Edit Meet Result</div>
+    <div style="background:var(--green)11;border:1px solid var(--green)33;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--green);font-family:var(--mono)">
+      ✓ PR is calculated automatically — no need to tick a box
+    </div>
+    <div class="grid-3" style="margin-bottom:12px">
+      <div class="form-group"><label class="form-label">Date</label>
+        <input class="form-input" type="date" id="m-date" value="${esc(m.date||'')}"></div>
+      <div class="form-group"><label class="form-label">Meet Name</label>
+        <input class="form-input" id="m-meet" value="${esc(m.meet||'')}"></div>
+      <div class="form-group"><label class="form-label">Pool</label>
+        <select class="form-input" id="m-pool">
+          <option value="25y" ${m.pool==='25y'?'selected':''}>25 Yards</option>
+          <option value="25m" ${m.pool==='25m'?'selected':''}>25 Meters</option>
+          <option value="50m" ${m.pool==='50m'?'selected':''}>50 Meters</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Event</label>
+        <input class="form-input" id="m-event" value="${esc(m.event||'')}"></div>
+      <div class="form-group"><label class="form-label">Time</label>
+        <input class="form-input" id="m-time" value="${esc(m.time||'')}"></div>
+      <div class="form-group"><label class="form-label">Notes</label>
+        <input class="form-input" id="m-notes" value="${esc(m.notes||'')}"></div>
+    </div>
+    <div style="font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Splits</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      ${[0,1,2,3].map(i=>`<div class="form-group"><label class="form-label">Split ${i+1}</label>
+        <input class="form-input" id="m-sp${i+1}" value="${esc(sp[i]||'')}" style="width:80px"></div>`).join('')}
+    </div>
+    <div style="font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Stroke Counts per length</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      ${[0,1,2,3].map(i=>`<div class="form-group"><label class="form-label">L${i+1}</label>
+        <input class="form-input" id="m-sc${i+1}" value="${sc[i]!=null?sc[i]:''}" style="width:56px"></div>`).join('')}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-purple" onclick="saveMeet(${id})">Save Changes</button>
+    </div>
+  `, 560);
+}
+
+// ── Edit Stroke Count ─────────────────────────────────────────────────────────
+function editStroke(id) {
+  const h = (DB.strokeHistory||[]).find(x=>x.id===id);
+  if (!h) return;
+  const row=(label,color,prefix,data)=>`
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:6px;font-family:var(--mono)">${label}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+        ${['L1','L2','L3','L4'].map(l=>`<div class="form-group"><label class="form-label">${l}</label>
+          <input class="form-input" id="${prefix}-${l.toLowerCase()}" value="${data?.[l.toLowerCase()]!=null?data[l.toLowerCase()]:''}" style="width:54px"></div>`).join('')}
+        <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
+          <input class="form-input" id="${prefix}-notes" value="${esc(data?.notes||'')}"></div>
+      </div>
+    </div>`;
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" style="color:var(--orange)">Edit Stroke Count Session</div>
+    <div class="grid-3" style="margin-bottom:14px">
+      <div class="form-group"><label class="form-label">Date</label>
+        <input class="form-input" type="date" id="sc-date" value="${esc(h.date||'')}"></div>
+      <div class="form-group"><label class="form-label">Pool</label>
+        <select class="form-input" id="sc-pool">
+          <option value="25y" ${h.pool==='25y'?'selected':''}>25 Yards</option>
+          <option value="25m" ${h.pool==='25m'?'selected':''}>25 Meters</option>
+          <option value="50m" ${h.pool==='50m'?'selected':''}>50 Meters</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Context</label>
+        <input class="form-input" id="sc-context" value="${esc(h.context||'')}"></div>
+    </div>
+    ${row('🏊 Freestyle','#38bdf8','sc-fr',h.freestyle)}
+    ${row('🔄 Backstroke','#818cf8','sc-bk',h.backstroke)}
+    ${row('🐸 Breaststroke','#22c55e','sc-br',h.breaststroke)}
+    ${row('🦋 Butterfly','#fb923c','sc-fl',h.butterfly)}
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--teal);margin-bottom:6px;font-family:var(--mono)">⚡ Kick Count</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group"><label class="form-label">Count</label>
+          <input class="form-input" id="sc-kick-count" value="${esc(h.kickCount?.count||'')}" style="width:100px"></div>
+        <div class="form-group"><label class="form-label">Unit</label>
+          <select class="form-input" id="sc-kick-unit" style="width:160px">
+            <option value="individual" ${h.kickCount?.unit==='individual'?'selected':''}>Individual movements</option>
+            <option value="cycles"     ${h.kickCount?.unit==='cycles'?'selected':''}>Full cycles</option>
+          </select></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
+          <input class="form-input" id="sc-kick-notes" value="${esc(h.kickCount?.notes||'')}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-orange" onclick="saveStrokes(${id})">Save Changes</button>
+    </div>
+  `, 580);
+}
 function showModal(html, maxW=520) {
   const box=document.getElementById('modal-box');
   box.style.maxWidth=maxW+'px';
@@ -1582,15 +1682,43 @@ function openAddModal() {
 }
 
 // ── Session Modal ──────────────────────────────────────────────────────────────
-function openSessionModal() {
-  const numReps=6;
-  const repRows=(n)=>Array.from({length:n},(_,i)=>`
-    <tr>
+// SET_TYPES defines the number of reps and legs for each set type
+const SET_TYPES = {
+  '6x100':  { reps:6,  legs:4, dist:100,  label:'6 × 100' },
+  '4x150':  { reps:4,  legs:6, dist:150,  label:'4 × 150' },
+  '5x150':  { reps:5,  legs:6, dist:150,  label:'5 × 150' },
+  '4x200':  { reps:4,  legs:8, dist:200,  label:'4 × 200' },
+  '5x200':  { reps:5,  legs:8, dist:200,  label:'5 × 200' },
+  '8x75':   { reps:8,  legs:3, dist:75,   label:'8 × 75'  },
+  '10x50':  { reps:10, legs:2, dist:50,   label:'10 × 50' },
+  'custom': { reps:6,  legs:4, dist:100,  label:'Custom'  },
+};
+
+function buildRepRows(numReps, numLegs, existingReps=[]) {
+  const legHeaders = Array.from({length:numLegs},(_,i)=>
+    `<th style="padding:4px 5px;font-size:9px;color:var(--muted);font-family:var(--mono)">L${i+1}</th>`
+  ).join('');
+  const rows = Array.from({length:numReps},(_,i)=>{
+    const r = existingReps[i] || {};
+    const legInputs = Array.from({length:numLegs},(_,li)=>{
+      const key = `l${li+1}`;
+      const val = r[key]!=null ? r[key] : '';
+      return `<td style="padding:3px 3px"><input class="form-input-sm rep-inp" id="r${i}-l${li+1}" value="${val}" placeholder="—" style="width:42px"></td>`;
+    }).join('');
+    return `<tr>
       <td class="mono" style="color:var(--accent);font-weight:700;padding:4px 6px">R${i+1}</td>
-      <td style="padding:3px 3px"><input class="form-input-sm rep-inp rep-inp-time" id="r${i}-time" placeholder="1:38"></td>
-      ${['l1','l2','l3','l4'].map(f=>`<td style="padding:3px 3px"><input class="form-input-sm rep-inp" id="r${i}-${f}" placeholder="—"></td>`).join('')}
-      <td style="padding:3px 3px"><input class="form-input-sm rep-inp-note form-input" id="r${i}-note" placeholder="notes"></td>
-    </tr>`).join('');
+      <td style="padding:3px 3px"><input class="form-input-sm rep-inp-time" id="r${i}-time" value="${esc(r.time||'')}" placeholder="2:34" style="width:62px;font-family:var(--mono);background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:4px 5px;font-size:11px;color:var(--text)"></td>
+      ${legInputs}
+      <td style="padding:3px 3px"><input class="form-input-sm rep-inp-note form-input" id="r${i}-note" value="${esc(r.notes||'')}" placeholder="notes" style="width:110px"></td>
+    </tr>`;
+  }).join('');
+  return { headers: legHeaders, rows };
+}
+
+function openSessionModal() {
+  const defaultType = '4x150';
+  const st = SET_TYPES[defaultType];
+  const { headers, rows } = buildRepRows(st.reps, st.legs);
 
   showModal(`
     <button class="modal-close" onclick="closeModal()">×</button>
@@ -1600,31 +1728,40 @@ function openSessionModal() {
         <input class="form-input" type="date" id="s-date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="form-group"><label class="form-label">Pool</label>
         <select class="form-input" id="s-pool">
-          <option value="25y">25 Yards</option><option value="25m">25 Meters</option><option value="50m">50 Meters</option>
+          <option value="25y">25 Yards</option>
+          <option value="25m" selected>25 Meters</option>
+          <option value="50m">50 Meters</option>
         </select></div>
       <div class="form-group"><label class="form-label">Interval</label>
-        <input class="form-input" id="s-interval" value="2:30"></div>
+        <input class="form-input" id="s-interval" value="3:45"></div>
+      <div class="form-group"><label class="form-label">Set Type</label>
+        <select class="form-input" id="s-settype" onchange="rebuildRepTable()">
+          ${Object.entries(SET_TYPES).map(([k,v])=>`<option value="${k}"${k===defaultType?' selected':''}>${v.label}</option>`).join('')}
+        </select></div>
+      <div class="form-group" id="s-custom-reps-group" style="display:none"><label class="form-label">Custom Reps</label>
+        <input class="form-input" type="number" id="s-custom-reps" value="6" min="1" max="12" onchange="rebuildRepTable()"></div>
+      <div class="form-group" id="s-custom-legs-group" style="display:none"><label class="form-label">Custom Legs</label>
+        <input class="form-input" type="number" id="s-custom-legs" value="4" min="2" max="10" onchange="rebuildRepTable()"></div>
       <div class="form-group"><label class="form-label">Goggles?</label>
         <select class="form-input" id="s-goggles">
           <option value="yes">Yes</option><option value="no">No</option>
         </select></div>
       <div class="form-group" style="grid-column:span 2"><label class="form-label">Notes</label>
-        <input class="form-input" id="s-notes" placeholder="Morning · spring break · no goggles..."></div>
+        <input class="form-input" id="s-notes" placeholder="25m pool · evening · good warm-up..."></div>
     </div>
 
-    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);margin-bottom:6px">Rep Data (L1–L4 = stroke counts per 25y/m)</div>
-    <div style="overflow-x:auto;margin-bottom:12px">
-      <table style="border-collapse:collapse">
-        <thead><tr>
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);margin-bottom:6px">
+      Rep Data — stroke counts per 25y/m length
+    </div>
+    <div style="overflow-x:auto;margin-bottom:12px" id="rep-table-wrap">
+      <table style="border-collapse:collapse" id="rep-table">
+        <thead><tr id="rep-table-headers">
           <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Rep</th>
           <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Time</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L1</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L2</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L3</th>
-          <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">L4</th>
+          ${headers}
           <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Notes</th>
         </tr></thead>
-        <tbody>${repRows(numReps)}</tbody>
+        <tbody id="rep-table-body">${rows}</tbody>
       </table>
     </div>
 
@@ -1633,8 +1770,10 @@ function openSessionModal() {
         <input class="form-input" id="s-effort" type="number" min="1" max="10" placeholder="5"></div>
       <div class="form-group"><label class="form-label">Could do 2 more?</label>
         <select class="form-input" id="s-2more">
-          <option value="">— not asked</option><option value="yes">Yes</option>
-          <option value="maybe">Maybe</option><option value="no">No</option>
+          <option value="">— not asked</option>
+          <option value="yes">Yes</option>
+          <option value="maybe">Maybe</option>
+          <option value="no">No</option>
         </select></div>
     </div>
 
@@ -1659,26 +1798,76 @@ function openSessionModal() {
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
       <button class="btn btn-green" onclick="saveSession()">Save Session</button>
     </div>
-  `, 600);
+  `, 640);
 }
 
+function rebuildRepTable() {
+  const typeKey = document.getElementById('s-settype')?.value;
+  const isCustom = typeKey === 'custom';
+  document.getElementById('s-custom-reps-group').style.display = isCustom ? '' : 'none';
+  document.getElementById('s-custom-legs-group').style.display = isCustom ? '' : 'none';
+
+  let numReps, numLegs;
+  if (isCustom) {
+    numReps = parseInt(document.getElementById('s-custom-reps')?.value) || 6;
+    numLegs = parseInt(document.getElementById('s-custom-legs')?.value) || 4;
+  } else {
+    const st = SET_TYPES[typeKey] || SET_TYPES['4x150'];
+    numReps = st.reps;
+    numLegs = st.legs;
+    // Auto-set interval suggestion
+    const intervalSuggestions = {'6x100':'2:30','4x150':'3:45','5x150':'3:45','4x200':'5:00','5x200':'5:00','8x75':'1:45','10x50':'1:15'};
+    if (intervalSuggestions[typeKey]) {
+      const intEl = document.getElementById('s-interval');
+      if (intEl && !intEl.dataset.userEdited) intEl.value = intervalSuggestions[typeKey];
+    }
+  }
+
+  const { headers, rows } = buildRepRows(numReps, numLegs);
+  const hdrRow = document.getElementById('rep-table-headers');
+  const body = document.getElementById('rep-table-body');
+  if (hdrRow && body) {
+    hdrRow.innerHTML = `
+      <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Rep</th>
+      <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Time</th>
+      ${headers}
+      <th style="padding:4px 6px;font-size:9px;color:var(--muted);font-family:var(--mono)">Notes</th>
+    `;
+    body.innerHTML = rows;
+  }
+}
+
+// Mark interval as user-edited so auto-fill doesn't overwrite it
+document.addEventListener('input', e => {
+  if (e.target?.id === 's-interval') e.target.dataset.userEdited = '1';
+});
+
 function saveSession() {
-  const reps=Array.from({length:6},(_,i)=>{
-    const time=document.getElementById(`r${i}-time`)?.value.trim();
-    if(!time)return null;
-    return {
-      rep:i+1, time,
-      l1:parseInt(document.getElementById(`r${i}-l1`)?.value)||null,
-      l2:parseInt(document.getElementById(`r${i}-l2`)?.value)||null,
-      l3:parseInt(document.getElementById(`r${i}-l3`)?.value)||null,
-      l4:parseInt(document.getElementById(`r${i}-l4`)?.value)||null,
-      notes:document.getElementById(`r${i}-note`)?.value.trim()||'',
-    };
+  const typeKey = document.getElementById('s-settype')?.value || 'custom';
+  const isCustom = typeKey === 'custom';
+  let numReps, numLegs;
+  if (isCustom) {
+    numReps = parseInt(document.getElementById('s-custom-reps')?.value) || 6;
+    numLegs = parseInt(document.getElementById('s-custom-legs')?.value) || 4;
+  } else {
+    const st = SET_TYPES[typeKey] || SET_TYPES['4x150'];
+    numReps = st.reps; numLegs = st.legs;
+  }
+
+  const reps = Array.from({length:numReps},(_,i)=>{
+    const time = document.getElementById(`r${i}-time`)?.value.trim();
+    if (!time) return null;
+    const rep = { rep:i+1, time, notes:document.getElementById(`r${i}-note`)?.value.trim()||'' };
+    for (let li=1; li<=numLegs; li++) {
+      const v = parseInt(document.getElementById(`r${i}-l${li}`)?.value);
+      rep[`l${li}`] = isNaN(v) ? null : v;
+    }
+    return rep;
   }).filter(Boolean);
 
-  const postSet=[0,1].map(i=>{
-    const time=document.getElementById(`ps${i}-time`)?.value.trim();
-    if(!time)return null;
+  const postSet = [0,1].map(i=>{
+    const time = document.getElementById(`ps${i}-time`)?.value.trim();
+    if (!time) return null;
     return {
       label:document.getElementById(`ps${i}-label`)?.value.trim()||'',
       time,
@@ -1690,12 +1879,14 @@ function saveSession() {
     };
   }).filter(Boolean);
 
-  const effort=document.getElementById('s-effort')?.value;
-  const sess={
+  const effort = document.getElementById('s-effort')?.value;
+  const sess = {
     id:uid(),
     date:document.getElementById('s-date').value,
     pool:document.getElementById('s-pool').value,
     interval:document.getElementById('s-interval').value.trim(),
+    setType:typeKey,
+    numLegs,
     notes:document.getElementById('s-notes').value.trim(),
     goggles:document.getElementById('s-goggles').value==='yes',
     reps, postSet,
@@ -1706,11 +1897,13 @@ function saveSession() {
   saveData(); closeModal(); renderSessions(); toast('Session saved ✓');
 }
 
-// ── Meet Modal ─────────────────────────────────────────────────────────────────
 function openMeetModal() {
   showModal(`
     <button class="modal-close" onclick="closeModal()">×</button>
     <div class="modal-title" style="color:var(--purple)">Add Meet Result</div>
+    <div style="background:var(--green)11;border:1px solid var(--green)33;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--green)">
+      ✓ PR status is calculated automatically based on all results for that event — no need to select it
+    </div>
     <div class="grid-3" style="margin-bottom:12px">
       <div class="form-group"><label class="form-label">Date</label>
         <input class="form-input" type="date" id="m-date" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -1724,7 +1917,7 @@ function openMeetModal() {
         <input class="form-input" id="m-event" placeholder="100 Free"></div>
       <div class="form-group"><label class="form-label">Time</label>
         <input class="form-input" id="m-time" placeholder="1:38.17"></div>
-      <div class="form-group"><label class="form-label">Previous Best</label>
+      <div class="form-group"><label class="form-label">Previous Best <span style="color:var(--muted)">(optional)</span></label>
         <input class="form-input" id="m-prev" placeholder="1:46.26"></div>
     </div>
     <div style="font-size:9px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Splits</div>
@@ -1737,13 +1930,8 @@ function openMeetModal() {
       ${[1,2,3,4].map(i=>`<div class="form-group"><label class="form-label">L${i}</label>
         <input class="form-input" id="m-sc${i}" placeholder="—" style="width:56px"></div>`).join('')}
     </div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
-      <div class="form-group" style="flex:1"><label class="form-label">Notes</label>
-        <input class="form-input" id="m-notes" placeholder="Race notes, conditions..."></div>
-    </div>
-    <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">
-      💡 PR status is set automatically — the fastest time for each event &amp; pool is marked as PR.
-    </div>
+    <div class="form-group" style="margin-bottom:12px"><label class="form-label">Notes</label>
+      <input class="form-input" id="m-notes" placeholder="Race notes, conditions..."></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
       <button class="btn btn-purple" onclick="saveMeet()">Save Result</button>
@@ -1761,12 +1949,12 @@ function saveMeet() {
     event:document.getElementById('m-event').value.trim(),
     time:document.getElementById('m-time').value.trim(),
     prev:document.getElementById('m-prev').value.trim()||null,
-    pr:false,
+    pr:false, // will be set by recomputeAllPRs
     splits, strokeCounts,
     notes:document.getElementById('m-notes').value.trim(),
   };
   DB.meetResults=[...(DB.meetResults||[]),result];
-  recomputePRs();
+  recomputeAllPRs();
   saveData(); closeModal(); renderMeets(); toast('Meet result saved ✓');
 }
 
