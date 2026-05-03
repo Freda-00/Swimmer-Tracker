@@ -737,7 +737,7 @@ function renderDashboard() {
     <div class="card" style="margin-bottom:16px">
       <div class="section-hdr" style="border-left-color:var(--purple)">
         <div><h3 style="color:var(--purple)">QUALIFYING STATUS — 11-12 JR CHAMPS</h3>
-          <p>SC bests (yards) vs SCY Jr Champs · LC bests (meters) vs LCM Jr Champs · 11-12 age group</p></div>
+          <p>SC bests (yards) vs SCY 11-12 Jr Champs · LC bests (meters) vs LCM 11-12 Jr Champs · green zone = qualifying window</p></div>
       </div>
       <div id="qual-figure"></div>
     </div>
@@ -1188,92 +1188,96 @@ function renderQualFigure() {
     {key:"im200",label:"200 IM",     color:"#ec4899"},
   ];
 
-  // Status helper
-  const bandStatus = (timeSec, topSec, botSec, ageLbl) => {
-    if (!timeSec||!topSec||!botSec) return null;
-    if (timeSec <= topSec) return {text:"Exceeds Sr cut",color:"#818cf8"};
-    if (timeSec <= botSec) return {text:"✓ Qualifies ("+ageLbl+")",color:"#3fb950"};
-    return {text:"+"+(timeSec-botSec).toFixed(2)+"s needed",color:"#e3b341"};
+  const bandStat = (sec, topSec, botSec) => {
+    if (!sec||!topSec||!botSec) return null;
+    if (sec <= topSec) return {text:"Exceeds Sr cut — Senior/14U level", color:"#818cf8", icon:"🏅"};
+    if (sec <= botSec) return {text:"✓ Qualifies for 11-12 Jr Champs",   color:"#3fb950", icon:"✅"};
+    return {text:"Need "+(sec-botSec).toFixed(2)+"s faster to qualify",  color:"#e3b341", icon:"⏱️"};
   };
 
-  // Mini bar helper
-  const miniBar = (timeSec, t10, b10, t11, b11, label) => {
-    if (!t10||!b10) return "";
-    const lo=(t11||t10)*0.95, hi=b10*1.05, range=hi-lo;
-    const p=s=>s?Math.max(0,Math.min(100,((s-lo)/range)*100)):null;
-    const pt=p(t10),pb=p(b10),p11t=t11?p(t11):null,p11b=b11?p(b11):null,pT=p(timeSec);
-    const dc=!timeSec?"#8b949e":timeSec<=(t11||t10)?"#818cf8":timeSec<=b10&&(!b11||timeSec<=b11)?"#3fb950":timeSec<=b10?"#e3b341":"#f85149";
-    return `<div style="margin-bottom:6px">
-      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:3px">${label}</div>
-      <div style="height:14px;background:#21262d;border-radius:3px;position:relative">
-        ${p11t!=null&&p11b!=null?`<div style="position:absolute;top:0;bottom:0;left:${p11t}%;width:${p11b-p11t}%;background:#3fb95033;border-left:2px solid #3fb95066;border-right:2px solid #3fb95066"></div>`:""}
-        <div style="position:absolute;top:0;bottom:0;left:${pt}%;width:${pb-pt}%;background:#58a6ff18;border-left:2px dashed #58a6ff55;border-right:2px dashed #58a6ff55"></div>
-        ${pT!=null?`<div style="position:absolute;top:50%;left:${pT}%;transform:translate(-50%,-50%);width:12px;height:12px;background:${dc};border-radius:50%;border:2px solid #06080f;z-index:2"></div>`:""}
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:2px">
-        <span style="font-size:8px;color:#818cf8;font-family:var(--mono)">${(t11||t10)} →</span>
-        <span style="font-size:8px;color:#58a6ff;font-family:var(--mono)">← ${b10}</span>
-      </div>
-    </div>`;
+  const qualBar = (sec, top11, bot11, topLabel, botLabel) => {
+    if (!top11||!bot11) return "";
+    const lo=top11*0.96, hi=bot11*1.06, range=hi-lo;
+    const p=s=>s!=null?Math.max(0,Math.min(100,((s-lo)/range)*100)):null;
+    const pTop=p(top11), pBot=p(bot11), pSec=p(sec);
+    const dc=!sec?"#8b949e":sec<=top11?"#818cf8":sec<=bot11?"#3fb950":"#e3b341";
+    const gapLine=sec&&sec>bot11?`<div style="position:absolute;top:50%;left:${pBot}%;right:${100-pSec}%;height:2px;background:#e3b34166;transform:translateY(-50%);z-index:1"></div>`:"";
+    return `
+      <div style="margin:10px 0 4px">
+        <div style="position:relative;height:16px;margin-bottom:2px">
+          <span style="position:absolute;left:${pTop}%;transform:translateX(-50%);font-size:9px;color:#818cf8;font-family:var(--mono);white-space:nowrap">← Sr cut ${topLabel}</span>
+          <span style="position:absolute;left:${pBot}%;transform:translateX(-50%);font-size:9px;color:#3fb950;font-family:var(--mono);white-space:nowrap">Entry ${botLabel} →</span>
+        </div>
+        <div style="height:20px;background:#161b22;border-radius:5px;position:relative;border:1px solid #21262d;overflow:visible">
+          <div style="position:absolute;top:0;bottom:0;left:0;width:${pTop}%;background:#21262d88;border-radius:5px 0 0 5px"></div>
+          <div style="position:absolute;top:0;bottom:0;left:${pBot}%;right:0;background:#21262d88;border-radius:0 5px 5px 0"></div>
+          <div style="position:absolute;top:0;bottom:0;left:${pTop}%;width:${pBot-pTop}%;background:linear-gradient(90deg,#3fb95044,#3fb95022);border-left:3px solid #3fb950;border-right:3px solid #3fb950aa">
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;color:#3fb95088;font-family:var(--mono);font-weight:700;letter-spacing:.5px">QUALIFYING WINDOW</div>
+          </div>
+          ${gapLine}
+          ${pSec!=null?`<div style="position:absolute;top:50%;left:${pSec}%;transform:translate(-50%,-50%);z-index:10"><div style="width:16px;height:16px;background:${dc};border-radius:50%;border:3px solid #06080f;box-shadow:0 0 8px ${dc}cc"></div></div>`:""}
+        </div>
+        ${pSec!=null&&sec?`<div style="position:relative;height:14px;margin-top:2px"><span style="position:absolute;left:${pSec}%;transform:translateX(-50%);font-size:9px;font-weight:800;color:${dc};font-family:var(--mono)">${fmtSec(sec)}</span></div>`:""}
+      </div>`;
   };
 
   const eventCard = ev => {
     const sc=(DB.scBests||{})[ev.key]?.time, scS=toSec(sc);
     const lc=(DB.lcBests||{})[ev.key]?.time, lcS=toSec(lc);
-    const hasSC = SC10_TOP[ev.key]&&SC10_BOT[ev.key];
-    const hasLC = LC10_TOP[ev.key]&&LC10_BOT[ev.key];
-    const sc10s = hasSC?bandStatus(scS,toSec(SC10_TOP[ev.key]),toSec(SC10_BOT[ev.key]),"9-10"):null;
-    const sc11s = SC11_TOP[ev.key]?bandStatus(scS,toSec(SC11_TOP[ev.key]),toSec(SC11_BOT[ev.key]),"11-12"):null;
-    const lc10s = hasLC?bandStatus(lcS,toSec(LC10_TOP[ev.key]),toSec(LC10_BOT[ev.key]),"9-10"):null;
-    const lc11s = LC11_TOP[ev.key]?bandStatus(lcS,toSec(LC11_TOP[ev.key]),toSec(LC11_BOT[ev.key]),"11-12"):null;
-
-    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;border-left:4px solid ${ev.color}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
-        <span style="font-size:13px;font-weight:800;color:${ev.color};font-family:var(--mono)">${ev.label}</span>
-        <div style="display:flex;gap:10px">
-          ${sc?`<span style="font-size:11px;color:var(--muted);font-family:var(--mono)">SC: <b style="color:var(--text)">${sc}</b></span>`:""}
-          ${lc?`<span style="font-size:11px;color:var(--muted);font-family:var(--mono)">LC: <b style="color:var(--teal)">${lc}</b></span>`:""}
+    const sc11t=toSec(SC11_TOP[ev.key]), sc11b=toSec(SC11_BOT[ev.key]);
+    const lc11t=toSec(LC11_TOP[ev.key]), lc11b=toSec(LC11_BOT[ev.key]);
+    const scStat=bandStat(scS,sc11t,sc11b);
+    const lcStat=bandStat(lcS,lc11t,lc11b);
+    const hasSC=sc11t&&sc11b;
+    const hasLC=lc11t&&lc11b;
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;border-left:5px solid ${ev.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">
+          <span style="font-size:14px;font-weight:800;color:${ev.color};font-family:var(--mono)">${ev.label}</span>
+          <div style="display:flex;gap:12px">
+            ${sc?`<div style="text-align:right"><div style="font-size:8px;color:var(--muted);font-family:var(--mono)">SC BEST</div><div style="font-size:14px;font-weight:800;color:var(--text)">${sc}</div></div>`:""}
+            ${lc?`<div style="text-align:right"><div style="font-size:8px;color:var(--teal);font-family:var(--mono)">LC BEST</div><div style="font-size:14px;font-weight:800;color:var(--teal)">${lc}</div></div>`:""}
+          </div>
         </div>
-      </div>
-
-      ${hasSC?`<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
-        <div style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;font-family:var(--mono);margin-bottom:6px">
-          📏 Short Course (SCY) · Jr Champs</div>
-        ${miniBar(scS,toSec(SC10_TOP[ev.key]),toSec(SC10_BOT[ev.key]),toSec(SC11_TOP[ev.key]),toSec(SC11_BOT[ev.key]),"9-10 & 11-12 qualifying windows")}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          ${sc10s?`<span style="font-size:9px;color:var(--muted)">9-10:</span><span style="background:${sc10s.color}22;color:${sc10s.color};border:1px solid ${sc10s.color}44;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;font-family:var(--mono)">${sc10s.text}</span>`:""}
-          ${sc11s?`<span style="font-size:9px;color:var(--muted)">11-12:</span><span style="background:${sc11s.color}22;color:${sc11s.color};border:1px solid ${sc11s.color}44;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;font-family:var(--mono)">${sc11s.text}</span>`:""}
-          ${!sc?`<span style="font-size:10px;color:var(--muted);font-style:italic">No SC time — enter in Season Bests</span>`:""}
-        </div>
-      </div>`:""}
-
-      ${hasLC?`<div>
-        <div style="font-size:9px;font-weight:700;color:var(--teal);text-transform:uppercase;font-family:var(--mono);margin-bottom:6px">
-          🌊 Long Course (LCM) · Jr Champs</div>
-        ${miniBar(lcS,toSec(LC10_TOP[ev.key]),toSec(LC10_BOT[ev.key]),toSec(LC11_TOP[ev.key]),toSec(LC11_BOT[ev.key]),"9-10 & 11-12 qualifying windows")}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          ${lc10s?`<span style="font-size:9px;color:var(--muted)">9-10:</span><span style="background:${lc10s.color}22;color:${lc10s.color};border:1px solid ${lc10s.color}44;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;font-family:var(--mono)">${lc10s.text}</span>`:""}
-          ${lc11s?`<span style="font-size:9px;color:var(--muted)">11-12:</span><span style="background:${lc11s.color}22;color:${lc11s.color};border:1px solid ${lc11s.color}44;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;font-family:var(--mono)">${lc11s.text}</span>`:""}
-          ${!lc?`<span style="font-size:10px;color:var(--muted);font-style:italic">No LC time — add after LC meet</span>`:""}
-        </div>
-      </div>`:""}
-
-      ${!hasSC&&!hasLC?`<p style="font-size:11px;color:var(--muted)">Standards not available for this event</p>`:""}
-    </div>`;
+        ${hasSC?`
+          <div style="margin-bottom:${hasLC?12:0}px;${hasLC?"padding-bottom:12px;border-bottom:1px solid var(--border)":""}">
+            <div style="font-size:9px;font-weight:700;color:var(--accent);text-transform:uppercase;font-family:var(--mono);letter-spacing:.8px;margin-bottom:2px">
+              📏 Short Course Yards (SCY) — 11-12 Jr Champs · ${SC11_TOP[ev.key]} – ${SC11_BOT[ev.key]}</div>
+            ${qualBar(scS,sc11t,sc11b,SC11_TOP[ev.key],SC11_BOT[ev.key])}
+            ${scStat?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <span style="font-size:14px">${scStat.icon}</span>
+              <span style="background:${scStat.color}22;color:${scStat.color};border:1px solid ${scStat.color}55;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;font-family:var(--mono)">${scStat.text}</span>
+            </div>`:""}
+            ${!sc?`<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">No SC time — enter in Season Bests tab</p>`:""}
+          </div>`:""}
+        ${hasLC?`
+          <div>
+            <div style="font-size:9px;font-weight:700;color:var(--teal);text-transform:uppercase;font-family:var(--mono);letter-spacing:.8px;margin-bottom:2px">
+              🌊 Long Course Meters (LCM) — 11-12 Jr Champs · ${LC11_TOP[ev.key]||"—"} – ${LC11_BOT[ev.key]||"—"}</div>
+            ${qualBar(lcS,lc11t,lc11b,LC11_TOP[ev.key]||"",LC11_BOT[ev.key]||"")}
+            ${lcStat?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <span style="font-size:14px">${lcStat.icon}</span>
+              <span style="background:${lcStat.color}22;color:${lcStat.color};border:1px solid ${lcStat.color}55;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;font-family:var(--mono)">${lcStat.text}</span>
+            </div>`:""}
+            ${!lc?`<p style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">No LC time yet — add after July meet</p>`:""}
+          </div>`:""}
+        ${!hasSC&&!hasLC?`<p style="color:var(--muted);font-size:11px">Standards not available</p>`:""}
+      </div>`;
   };
 
   qg.innerHTML = `
-    <div style="background:var(--panel);border-radius:8px;padding:12px 16px;border:1px solid var(--border);margin-bottom:14px">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">How to read</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-bottom:8px">
-        ${[["#3fb950","Green zone / dot = qualifies for that age group"],["#58a6ff","Blue dashed zone = other age group window"],["#818cf8","Purple dot = exceeds Sr cut (too fast for Jr Champs)"],["#e3b341","Yellow dot = close — gap shown in seconds"],["#f85149","Red dot = outside both windows"]].map(([c,t])=>`<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0"></span><span style="font-size:10px;color:var(--muted)">${t}</span></div>`).join("")}
-      </div>
-      <div style="font-size:10px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px">
-        <b style="color:var(--accent)">📏 SC section</b> uses her <b>short course yards</b> best vs <b>SCY Junior Championships</b> qualifying bands &nbsp;|&nbsp;
-        <b style="color:var(--teal)">🌊 LC section</b> uses her <b>long course meters</b> best vs <b>LCM Junior Championships</b> qualifying bands
-      </div>
+    <div style="background:var(--panel);border-radius:8px;padding:12px 16px;border:1px solid var(--border);margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Legend:</span>
+      ${[["bar","#3fb950","✅ In qualifying window"],["dot","#818cf8","🏅 Exceeds Sr cut"],["dot","#e3b341","⏱️ Outside — gap in seconds shown"],["dot","#8b949e","— No time recorded"]].map(([type,c,t])=>`
+        <div style="display:flex;align-items:center;gap:6px">
+          ${type==="bar"?`<div style="width:20px;height:10px;background:#3fb95044;border:2px solid #3fb950;border-radius:2px"></div>`:`<div style="width:10px;height:10px;border-radius:50%;background:${c}"></div>`}
+          <span style="font-size:10px;color:var(--muted)">${t}</span>
+        </div>`).join("")}
+      <span style="font-size:10px;color:var(--muted);border-left:1px solid var(--border);padding-left:16px">
+        <b style="color:var(--accent)">📏 SC</b> = short course yards &nbsp;|&nbsp; <b style="color:var(--teal)">🌊 LC</b> = long course meters &nbsp;|&nbsp; All 11-12 age group only
+      </span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px">
       ${qualEvts.map(ev=>eventCard(ev)).join("")}
     </div>`;
 }
