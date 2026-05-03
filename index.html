@@ -474,6 +474,24 @@ function loadData() {
     const raw = localStorage.getItem(STORAGE_KEY);
     DB = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_DATA));
   } catch { DB = JSON.parse(JSON.stringify(DEFAULT_DATA)); }
+  migrateData();
+}
+
+// Fix any sessions with large random uid() IDs — renumber them sequentially
+// preserving chronological order while keeping any already-small IDs intact
+function migrateData() {
+  if (!DB.sessions || !DB.sessions.length) return;
+  // Find sessions with non-sequential IDs (anything > 10000 is clearly a uid timestamp)
+  const hasJunk = DB.sessions.some(s => typeof s.id === 'number' && s.id > 10000);
+  if (!hasJunk) return;
+  // Sort by date first, then by existing id as tiebreaker, then renumber 1..N
+  DB.sessions.sort((a, b) => {
+    const dc = (a.date||'').localeCompare(b.date||'');
+    if (dc !== 0) return dc;
+    return (a.id||0) - (b.id||0);
+  });
+  DB.sessions.forEach((s, i) => { s.id = i + 1; });
+  saveData();
 }
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
@@ -709,8 +727,8 @@ function renderDashboard() {
     <!-- ── PREDICTION FIGURE ── -->
     <div class="card" style="margin-bottom:16px">
       <div class="section-hdr" style="border-left-color:var(--orange)">
-        <div><h3 style="color:var(--orange)">PREDICTIONS — SC→LC CONVERSION</h3>
-          <p>SC season bests × USA Swimming SCY→LCM factors · compared against LC Jr Champs 11-12 window</p></div>
+        <div><h3 style="color:var(--orange)">PREDICTIONS</h3>
+          <p>🌊 July LC Jr Champs — 9-10 (2.5 months) · 🌊 July LC Jr Champs — 11-12 (2.5 months) · 📏 March SC Jr Champs — 11-12 (9 months)</p></div>
       </div>
       <div id="pred-figure"></div>
     </div>
@@ -958,97 +976,201 @@ function renderPredFigure() {
     {key:'im200',label:'200 IM',     color:'#ec4899', factor:SC_TO_LC.im200},
   ];
 
-  const statusPill = (text, color) =>
-    `<span style="background:${color}22;color:${color};border:1px solid ${color}44;border-radius:20px;padding:1px 9px;font-size:10px;font-weight:700;font-family:var(--mono)">${text}</span>`;
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const sPill = (text, color) =>
+    `<span style="background:${color}22;color:${color};border:1px solid ${color}44;
+      border-radius:20px;padding:1px 9px;font-size:10px;font-weight:700;
+      font-family:var(--mono);white-space:nowrap">${text}</span>`;
 
-  const lcQual11 = (predSec, key) => {
-    const t=toSec(LC11_TOP[key]), b=toSec(LC11_BOT[key]);
-    if (!t||!b||!predSec) return null;
-    if (predSec<=t) return {text:'Exceeds Sr cut',color:'#818cf8'};
-    if (predSec<=b) return {text:'✓ 11-12 LC Qualifies',color:'#3fb950'};
-    return {text:`+${(predSec-b).toFixed(2)}s needed`,color:'#e3b341'};
+  // Status against a dual-band (top cut / bottom cut)
+  const bandStat = (sec, topSec, botSec) => {
+    if (!sec||!topSec||!botSec) return null;
+    if (sec<=topSec) return {text:'Exceeds Sr cut',color:'#818cf8'};
+    if (sec<=botSec) return {text:'✓ Qualifies',color:'#3fb950'};
+    return {text:`+${(sec-botSec).toFixed(2)}s`,color:'#e3b341'};
   };
 
-  const cards = predEvts.map(ev=>{
-    const scRec = (DB.scBests||{})[ev.key];
-    const lcRec = (DB.lcBests||{})[ev.key];
-    const scSec = toSec(scRec?.time);
-    const predSec = scSec ? scSec * ev.factor : null;
-    const predStr = predSec ? fmtSec(predSec) : '—';
-    const adjSec  = predSec ? predSec + 2.5 : null; // LC debut +2.5s adjustment
-    const adjStr  = adjSec  ? fmtSec(adjSec)  : '—';
-    const lcActual= lcRec?.time;
-    const qs = lcQual11(predSec, ev.key);
-    const qsAdj = lcQual11(adjSec, ev.key);
+  // Mini qualifying bar
+  const miniBar = (dotSec, adjSec, actSec, topSec, botSec, topLabel, botLabel) => {
+    if (!topSec||!botSec) return '';
+    const lo=topSec*0.93, hi=botSec*1.07, range=hi-lo;
+    const p=s=>s!=null?Math.max(0,Math.min(100,((s-lo)/range)*100)):null;
+    const pTop=p(topSec), pBot=p(botSec);
+    const pDot=p(dotSec), pAdj=p(adjSec), pAct=p(actSec);
+    const dc=!dotSec?'#8b949e':dotSec<=topSec?'#818cf8':dotSec<=botSec?'#3fb950':'#e3b341';
+    return `
+      <div style="margin:8px 0">
+        <div style="height:10px;background:#21262d;border-radius:3px;position:relative;margin-bottom:3px">
+          <div style="position:absolute;top:0;bottom:0;left:${pTop}%;width:${pBot-pTop}%;
+            background:#3fb95033;border-left:2px solid #3fb95066;border-right:2px solid #3fb95066"></div>
+          ${pDot!=null?`<div style="position:absolute;top:50%;left:${pDot}%;transform:translate(-50%,-50%);
+            width:10px;height:10px;background:${dc};border-radius:50%;border:2px solid #06080f;z-index:3"
+            title="Predicted: ${fmtSec(dotSec)}"></div>`:''}
+          ${pAdj!=null?`<div style="position:absolute;top:50%;left:${pAdj}%;transform:translate(-50%,-50%);
+            width:8px;height:8px;background:${dc}88;border-radius:50%;border:1px solid #06080f;z-index:2"
+            title="Adjusted: ${fmtSec(adjSec)}"></div>`:''}
+          ${pAct!=null?`<div style="position:absolute;top:50%;left:${pAct}%;transform:translate(-50%,-50%);
+            width:10px;height:10px;background:#e3b341;border-radius:50%;border:2px solid #06080f;z-index:4"
+            title="Actual: ${fmtSec(actSec)}"></div>`:''}
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:8px;color:#818cf8;font-family:var(--mono)">${topLabel} →</span>
+          <span style="font-size:8px;color:#58a6ff;font-family:var(--mono)">← ${botLabel}</span>
+        </div>
+      </div>`;
+  };
 
-    // Mini bar: SC best → Predicted LC → LC 11-12 entry cut
-    const lc11b = toSec(LC11_BOT[ev.key]);
-    const lc11t = toSec(LC11_TOP[ev.key]);
-    let bar = '';
-    if (scSec && lc11b && lc11t) {
-      const lo = lc11t*0.93, hi = lc11b*1.07, range = hi-lo;
-      const p = s => s?Math.max(0,Math.min(100,((s-lo)/range)*100)):null;
-      const pPred = p(predSec), pAdj = p(adjSec), pLC = p(toSec(lcActual));
-      const pTop = p(lc11t), pBot = p(lc11b);
-      const dotCol = !predSec?'#8b949e':predSec<=lc11t?'#818cf8':predSec<=lc11b?'#3fb950':'#e3b341';
-      bar = `
-        <div style="margin:8px 0">
-          <div style="height:10px;background:#21262d;border-radius:3px;position:relative;margin-bottom:3px">
-            <div style="position:absolute;top:0;bottom:0;left:${pTop}%;width:${pBot-pTop}%;background:#3fb95033;border-left:2px solid #3fb95066;border-right:2px solid #3fb95066"></div>
-            ${pPred!=null?`<div style="position:absolute;top:50%;left:${pPred}%;transform:translate(-50%,-50%);width:10px;height:10px;background:${dotCol};border-radius:50%;border:2px solid #06080f;z-index:3" title="Predicted: ${predStr}"></div>`:''}
-            ${pAdj!=null?`<div style="position:absolute;top:50%;left:${pAdj}%;transform:translate(-50%,-50%);width:8px;height:8px;background:${dotCol}88;border-radius:50%;border:1px solid #06080f;z-index:2" title="Adjusted (+2.5s): ${adjStr}"></div>`:''}
-            ${pLC!=null?`<div style="position:absolute;top:50%;left:${pLC}%;transform:translate(-50%,-50%);width:10px;height:10px;background:#e3b341;border-radius:50%;border:2px solid #06080f;z-index:4" title="LC Actual: ${lcActual}">
-              <div style="position:absolute;top:-3px;right:-3px;width:6px;height:6px;background:#e3b341;border-radius:50%"></div></div>`:''}
-          </div>
-          <div style="display:flex;justify-content:space-between">
-            <span style="font-size:8px;color:#818cf8;font-family:var(--mono)">${LC11_TOP[ev.key]||''} →</span>
-            <span style="font-size:8px;color:#58a6ff;font-family:var(--mono)">← ${LC11_BOT[ev.key]||''}</span>
-          </div>
-        </div>`;
-    }
+  // ── SC→LC conversion prediction (used for both July LC 9-10 and 11-12) ──────
+  const lcCard = (ev, topBand, botBand, ageLabel, accentColor) => {
+    const scRec=(DB.scBests||{})[ev.key];
+    const lcRec=(DB.lcBests||{})[ev.key];
+    const scSec=toSec(scRec?.time);
+    const predSec=scSec?scSec*ev.factor:null;
+    const adjSec=predSec?predSec+2.5:null;
+    const actSec=toSec(lcRec?.time);
+    const top=toSec(topBand[ev.key]), bot=toSec(botBand[ev.key]);
+    const qs=bandStat(predSec,top,bot);
+    const qsAdj=bandStat(adjSec,top,bot);
+    const qsAct=actSec?bandStat(actSec,top,bot):null;
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;
+        padding:12px;border-left:4px solid ${ev.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+          <span style="font-size:12px;font-weight:800;color:${ev.color};font-family:var(--mono)">${ev.label}</span>
+          <span style="font-size:9px;color:var(--muted);font-family:var(--mono)">×${ev.factor.toFixed(3)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:4px">
+          <div><div style="font-size:8px;color:var(--muted);font-family:var(--mono)">SC Best</div>
+            <div style="font-size:13px;font-weight:800;color:var(--text)">${scRec?.time||'—'}</div></div>
+          <div><div style="font-size:8px;color:var(--muted);font-family:var(--mono)">Predicted LC</div>
+            <div style="font-size:13px;font-weight:800;color:${ev.color}">${predSec?fmtSec(predSec):'—'}</div></div>
+          <div><div style="font-size:8px;color:var(--muted);font-family:var(--mono)">Adj (+2.5s)</div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted)">${adjSec?fmtSec(adjSec):'—'}</div></div>
+          <div><div style="font-size:8px;color:var(--muted);font-family:var(--mono)">LC Actual</div>
+            <div style="font-size:13px;font-weight:800;color:var(--gold)">${lcRec?.time||'—'}</div></div>
+        </div>
+        ${top&&bot?miniBar(predSec,adjSec,actSec,top,bot,topBand[ev.key],botBand[ev.key]):''}
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+          ${qs?sPill(qs.text,qs.color):''}
+          ${qsAdj&&qsAdj.text!==qs?.text?`<span style="font-size:9px;color:var(--muted)">adj:</span>${sPill(qsAdj.text,qsAdj.color)}`:''}
+          ${qsAct?`<span style="font-size:9px;color:var(--gold)">actual:</span>${sPill(qsAct.text,qsAct.color)}`:''}
+        </div>
+      </div>`;
+  };
 
-    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;border-left:4px solid ${ev.color}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
-        <span style="font-size:12px;font-weight:800;color:${ev.color};font-family:var(--mono)">${ev.label}</span>
-        <span style="font-size:9px;color:var(--muted);font-family:var(--mono)">×${ev.factor.toFixed(3)}</span>
+  // ── SC improvement prediction for March (9 months away) ─────────────────────
+  // Strategy: apply an age-group typical improvement rate for 11-year-old girls
+  // over ~9 months of consistent training. Conservative/target/stretch bands.
+  // Based on observed improvement trajectory from this athlete's data.
+  const SC_IMPROVE_RATES = {
+    // Event-specific improvement rates over 9 months (fraction reduction from current best)
+    // Conservative = 2%, Target = 4%, Stretch = 6%
+    // Sprint events (50s) tend to improve faster with technique work
+    // Longer events benefit more from aerobic base
+    fr50:  {cons:0.030, tgt:0.050, str:0.075},
+    fr100: {cons:0.025, tgt:0.045, str:0.070},
+    fr200: {cons:0.020, tgt:0.040, str:0.065},
+    bk50:  {cons:0.035, tgt:0.055, str:0.080},
+    bk100: {cons:0.030, tgt:0.050, str:0.075},
+    br50:  {cons:0.030, tgt:0.050, str:0.075},
+    br100: {cons:0.025, tgt:0.045, str:0.070},
+    fl50:  {cons:0.035, tgt:0.060, str:0.085},
+    fl100: {cons:0.030, tgt:0.055, str:0.080},
+    im200: {cons:0.025, tgt:0.045, str:0.070},
+  };
+
+  const scMarchCard = (ev) => {
+    const scRec=(DB.scBests||{})[ev.key];
+    const scSec=toSec(scRec?.time);
+    const rate=SC_IMPROVE_RATES[ev.key]||{cons:0.025,tgt:0.045,str:0.070};
+    const cons=scSec?fmtSec(scSec*(1-rate.cons)):null;
+    const tgt =scSec?fmtSec(scSec*(1-rate.tgt)):null;
+    const str =scSec?fmtSec(scSec*(1-rate.str)):null;
+    const consSec=scSec?scSec*(1-rate.cons):null;
+    const tgtSec =scSec?scSec*(1-rate.tgt):null;
+    const strSec =scSec?scSec*(1-rate.str):null;
+    const top11=toSec(SC11_TOP[ev.key]), bot11=toSec(SC11_BOT[ev.key]);
+    const qsCons=bandStat(consSec,top11,bot11);
+    const qsTgt =bandStat(tgtSec, top11,bot11);
+    const qsStr =bandStat(strSec, top11,bot11);
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;
+        padding:12px;border-left:4px solid ${ev.color}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+          <span style="font-size:12px;font-weight:800;color:${ev.color};font-family:var(--mono)">${ev.label}</span>
+          <span style="font-size:9px;color:var(--muted);font-family:var(--mono)">from ${scRec?.time||'—'}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">
+          <div style="background:#1a1f2e;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:8px;color:var(--muted);font-family:var(--mono);margin-bottom:2px">Conservative</div>
+            <div style="font-size:14px;font-weight:800;color:var(--muted)">${cons||'—'}</div>
+            <div style="font-size:8px;color:var(--muted)">−${(rate.cons*100).toFixed(0)}%</div>
+          </div>
+          <div style="background:#1a1f2e;border-radius:6px;padding:6px;text-align:center;border:1px solid ${ev.color}44">
+            <div style="font-size:8px;color:${ev.color};font-family:var(--mono);margin-bottom:2px;font-weight:700">Target</div>
+            <div style="font-size:14px;font-weight:800;color:${ev.color}">${tgt||'—'}</div>
+            <div style="font-size:8px;color:var(--muted)">−${(rate.tgt*100).toFixed(0)}%</div>
+          </div>
+          <div style="background:#1a1f2e;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:8px;color:var(--gold);font-family:var(--mono);margin-bottom:2px">Stretch</div>
+            <div style="font-size:14px;font-weight:800;color:var(--gold)">${str||'—'}</div>
+            <div style="font-size:8px;color:var(--muted)">−${(rate.str*100).toFixed(0)}%</div>
+          </div>
+        </div>
+        ${top11&&bot11?miniBar(tgtSec,consSec,null,top11,bot11,SC11_TOP[ev.key],SC11_BOT[ev.key]):''}
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">
+          ${qsTgt?sPill('Target: '+qsTgt.text,qsTgt.color):''}
+          ${qsStr&&qsStr.text!==qsTgt?.text?sPill('Stretch: '+qsStr.text,qsStr.color):''}
+        </div>
+      </div>`;
+  };
+
+  // ── Section wrapper ───────────────────────────────────────────────────────────
+  const section = (title, sub, color, content, legend) => `
+    <div style="margin-bottom:20px">
+      <div style="border-left:4px solid ${color};padding-left:12px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:800;color:${color}">${title}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${sub}</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:6px">
-        <div>
-          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">SC Best</div>
-          <div style="font-size:13px;font-weight:800;color:var(--text)">${scRec?.time||'—'}</div>
-        </div>
-        <div>
-          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">Predicted LC</div>
-          <div style="font-size:13px;font-weight:800;color:${ev.color}">${predStr}</div>
-        </div>
-        <div>
-          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">Adj (+2.5s)</div>
-          <div style="font-size:12px;font-weight:700;color:var(--muted)">${adjStr}</div>
-        </div>
-        <div>
-          <div style="font-size:8px;color:var(--muted);font-family:var(--mono)">LC Actual</div>
-          <div style="font-size:13px;font-weight:800;color:var(--gold)">${lcActual||'—'}</div>
-        </div>
-      </div>
-      ${bar}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-        ${qs?statusPill(qs.text,qs.color):''}
-        ${qsAdj&&qsAdj.text!==qs?.text?`<span style="font-size:9px;color:var(--muted);align-self:center">adj:</span>${statusPill(qsAdj.text,qsAdj.color)}`:''}
+      ${legend?`<div style="background:var(--panel);border-radius:6px;padding:8px 12px;
+        border:1px solid var(--border);margin-bottom:10px;font-size:10px;color:var(--muted)">${legend}</div>`:''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+        ${content}
       </div>
     </div>`;
-  }).join('');
+
+  const lcLegend = `<b style="color:var(--orange)">SC Best × conversion factor</b> = Predicted LC.
+    <b>Adj (+2.5s)</b> = realistic first-meet estimate.
+    <b style="color:var(--gold)">● Yellow dot</b> = actual LC time once entered.
+    <b style="color:var(--green)">Green zone</b> = qualifying window.`;
+
+  const scLegend = `<b>Conservative/Target/Stretch</b> = projected SC improvement over 9 months at 3 / 4.5 / 7% improvement rates.
+    Rates based on observed improvement trajectory and typical 11-year-old development.
+    <b>Dot</b> = target prediction vs 11-12 SC qualifying window.`;
 
   pf.innerHTML = `
-    <div style="background:var(--panel);border-radius:8px;padding:10px 14px;border:1px solid var(--border);margin-bottom:12px;font-size:10px;color:var(--muted)">
-      <b style="color:var(--orange)">How predictions work:</b> SC best × USA Swimming standard SCY→LCM conversion factor.
-      <b style="color:var(--text)">Predicted LC</b> = pure conversion.
-      <b style="color:var(--muted)">Adj (+2.5s)</b> = realistic first-meet LC estimate (LC debut typically runs 2–3s slower).
-      <b style="color:var(--gold)">●</b> Yellow dot = actual LC time recorded.
-      Green zone = 11-12 LC Jr Champs qualifying window.
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px">
-      ${cards}
-    </div>`;
+    ${section(
+      '🌊 July LC Jr Champs — 9-10 Age Group (2.5 months)',
+      'SC best × SCY→LCM conversion · compared against 9-10 LC Jr Champs qualifying window',
+      '#2dd4bf',
+      predEvts.map(ev=>LC10_TOP[ev.key]?lcCard(ev,LC10_TOP,LC10_BOT,'9-10','#2dd4bf'):'').join(''),
+      lcLegend
+    )}
+    ${section(
+      '🌊 July LC Jr Champs — 11-12 Age Group (2.5 months)',
+      'Same SC conversion · compared against 11-12 LC Jr Champs qualifying window',
+      '#38bdf8',
+      predEvts.map(ev=>LC11_TOP[ev.key]?lcCard(ev,LC11_TOP,LC11_BOT,'11-12','#38bdf8'):'').join(''),
+      ''
+    )}
+    ${section(
+      '📏 March SC Jr Champs — 11-12 Age Group (9 months)',
+      'Projected SC improvement from current bests over 9 months training · compared against 11-12 SC Jr Champs qualifying window',
+      '#bc8cff',
+      predEvts.filter(ev=>SC11_TOP[ev.key]).map(ev=>scMarchCard(ev)).join(''),
+      scLegend
+    )}
+  `;
 }
 
 function renderQualFigure() {
@@ -2453,8 +2575,10 @@ function saveSession() {
   }).filter(Boolean);
 
   const effort = document.getElementById('s-effort')?.value;
+  const existingIds = (DB.sessions||[]).map(s=>typeof s.id==='number'?s.id:0);
+  const nextId = existingIds.length ? Math.max(...existingIds) + 1 : 1;
   const sess = {
-    id:uid(),
+    id: nextId,
     date:document.getElementById('s-date').value,
     pool:document.getElementById('s-pool').value,
     interval:document.getElementById('s-interval').value.trim(),
